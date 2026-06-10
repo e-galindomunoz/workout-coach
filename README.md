@@ -1,6 +1,6 @@
-# Workout Coach Stage 1
+# Workout Coach Stage 2
 
-This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, and Supabase Auth.
+This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, and a multi-step onboarding profile flow.
 
 Current scope includes:
 
@@ -10,6 +10,8 @@ Current scope includes:
 - Supabase email/password authentication
 - Session persistence with AsyncStorage
 - Auth-aware routing
+- Multi-step onboarding profile form
+- Editable profile flow from Settings
 - Logout from Settings
 - Placeholder screens and tab navigation
 
@@ -58,6 +60,13 @@ That migration:
 - adds per-user select/insert/update/delete policies
 - adds an `updated_at` trigger
 
+## Onboarding routing
+
+- Signed out users are redirected to Login.
+- Signed in users without a completed `profiles` row are redirected to Onboarding.
+- Signed in users with a completed profile are redirected to the main tabs.
+- Settings includes an `Edit fitness profile` link that reuses the same profile form.
+
 ## Run on iPhone with Expo Go
 
 1. Install Expo Go from the App Store on your iPhone.
@@ -66,9 +75,12 @@ That migration:
 4. Scan the QR code with your iPhone Camera app or from inside Expo Go.
 5. Confirm the app opens to the Login screen when signed out.
 6. Create an account on the Signup screen or sign in on the Login screen.
-7. Confirm successful sign-in redirects to the main tabs.
-8. Open Settings and use Log out.
-9. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
+7. If the user has no completed profile, confirm the app redirects to Onboarding.
+8. Complete the onboarding steps and save the profile.
+9. Confirm successful completion redirects to the main tabs.
+10. Open Settings and use `Edit fitness profile` to update profile values.
+11. Open Settings and use Log out.
+12. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
 
 ## Later: EAS development builds
 

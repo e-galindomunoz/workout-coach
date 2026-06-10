@@ -1,38 +1,34 @@
 import { Redirect, useRouter } from 'expo-router';
 import { AppScreen } from '../../components/AppScreen';
-import { ProfileForm } from '../../components/ProfileForm';
 import { useAuth } from '../../components/AuthProvider';
 import { LoadingScreen } from '../../components/LoadingScreen';
+import { ProfileForm } from '../../components/ProfileForm';
 
-export default function OnboardingScreen() {
+export default function EditProfileScreen() {
   const router = useRouter();
-  const { applyProfile, initialized, profile, profileComplete, session } = useAuth();
+  const { applyProfile, initialized, profile, session } = useAuth();
 
   if (!initialized) {
-    return <LoadingScreen message="Loading onboarding..." />;
+    return <LoadingScreen message="Loading your profile..." />;
   }
 
   if (!session) {
     return <Redirect href="/auth/login" />;
   }
 
-  if (profileComplete) {
-    return <Redirect href="/tabs/dashboard" />;
-  }
-
   return (
     <AppScreen
-      title="Build your fitness profile"
-      description="Complete your onboarding so the app can route you into the main experience."
+      title="Edit fitness profile"
+      description="Update the same profile that powers onboarding and routing."
       fillContent
       scrollEnabled={false}
     >
       <ProfileForm
         initialProfile={profile}
-        mode="onboarding"
+        mode="edit"
         onSaved={async (savedProfile) => {
           applyProfile(savedProfile);
-          router.replace('/tabs/dashboard');
+          router.back();
         }}
       />
     </AppScreen>

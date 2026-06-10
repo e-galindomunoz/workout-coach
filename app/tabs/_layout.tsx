@@ -3,7 +3,7 @@ import { useAuth } from '../../components/AuthProvider';
 import { LoadingScreen } from '../../components/LoadingScreen';
 
 export default function TabsLayout() {
-  const { initialized, session } = useAuth();
+  const { initialized, profileComplete, session } = useAuth();
 
   if (!initialized) {
     return <LoadingScreen message="Loading your account..." />;
@@ -11,6 +11,10 @@ export default function TabsLayout() {
 
   if (!session) {
     return <Redirect href="/auth/login" />;
+  }
+
+  if (!profileComplete) {
+    return <Redirect href="/onboarding" />;
   }
 
   return (

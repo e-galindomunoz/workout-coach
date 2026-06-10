@@ -25,3 +25,22 @@ export type ProfileInsert = Partial<
 >;
 
 export type ProfileUpdate = ProfileInsert;
+
+export type ProfileFormValues = {
+  name: string;
+  age: string;
+  height: string;
+  currentWeight: string;
+  goalWeight: string;
+  mainGoal: string;
+  experienceLevel: string;
+  daysPerWeek: string;
+  preferredSplit: string;
+  workoutLength: string;
+  equipment: string;
+  injuries: string;
+  likedExercises: string;
+  dislikedExercises: string;
+  cardioPreference: string;
+  notes: string;
+};

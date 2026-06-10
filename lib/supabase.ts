@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, processLock } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
+import { isProfileComplete } from './profile';
 import type { Profile, ProfileInsert, ProfileUpdate } from '../types/supabase';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -119,3 +120,5 @@ export async function updateProfile(profile: ProfileUpdate) {
 
   return result;
 }
+
+export { isProfileComplete };

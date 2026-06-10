@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
@@ -5,7 +6,7 @@ import { useAuth } from '../../components/AuthProvider';
 import { supabase } from '../../lib/supabase';
 
 export default function SettingsScreen() {
-  const { user } = useAuth();
+  const { profile, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +31,16 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <Text style={styles.label}>Signed in as</Text>
         <Text style={styles.value}>{user?.email ?? 'Unknown user'}</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.label}>Current profile</Text>
+        <Text style={styles.value}>
+          {profile?.name ? `${profile.name} · ${profile.main_goal ?? 'goal pending'}` : 'Profile incomplete'}
+        </Text>
+        <Link href="/settings/profile" style={styles.editLink}>
+          Edit fitness profile
+        </Link>
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -70,6 +81,12 @@ const styles = StyleSheet.create({
   value: {
     color: '#f8fafc',
     fontSize: 16,
+  },
+  editLink: {
+    color: '#38bdf8',
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 6,
   },
   errorText: {
     color: '#fca5a5',

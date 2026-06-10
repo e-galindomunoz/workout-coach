@@ -4,19 +4,37 @@ import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
 type AppScreenProps = PropsWithChildren<{
   title: string;
   description: string;
+  scrollEnabled?: boolean;
+  fillContent?: boolean;
 }>;
 
-export function AppScreen({ title, description, children }: AppScreenProps) {
+export function AppScreen({
+  title,
+  description,
+  children,
+  scrollEnabled = true,
+  fillContent = false,
+}: AppScreenProps) {
+  const content = (
+    <View style={styles.container}>
+      <Text style={styles.eyebrow}>Workout Coach</Text>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.description}>{description}</Text>
+      <View style={[styles.content, fillContent && styles.contentFill]}>
+        {children}
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.container}>
-          <Text style={styles.eyebrow}>Workout Coach</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.description}>{description}</Text>
-          <View style={styles.content}>{children}</View>
-        </View>
-      </ScrollView>
+      {scrollEnabled ? (
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          {content}
+        </ScrollView>
+      ) : (
+        content
+      )}
     </SafeAreaView>
   );
 }
@@ -55,5 +73,8 @@ const styles = StyleSheet.create({
   content: {
     gap: 16,
     marginTop: 8,
+  },
+  contentFill: {
+    flex: 1,
   },
 });
