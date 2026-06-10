@@ -4,6 +4,7 @@ import type {
   AdjustWorkoutRequest,
   AdjustWorkoutResponse,
   CoachChatResponse,
+  WorkoutInsightRequest,
   WorkoutInsightResponse,
 } from '../types/ai';
 
@@ -30,14 +31,13 @@ export async function sendCoachMessage(
 }
 
 export async function getWorkoutInsight(
-  exerciseName?: string,
-  context?: Record<string, unknown>,
+  request: WorkoutInsightRequest,
 ): Promise<ApiResult<WorkoutInsightResponse>> {
   if (!isSupabaseConfigured) return notConfigured();
 
   const { data, error } = await supabase.functions.invoke<WorkoutInsightResponse>(
     'workout-insight',
-    { body: { exerciseName, context: context ?? {} } },
+    { body: request },
   );
 
   return {
@@ -47,15 +47,13 @@ export async function getWorkoutInsight(
 }
 
 export async function requestWorkoutAdjustment(
-  request: string,
-  currentWorkout: AdjustWorkoutRequest['currentWorkout'],
-  context?: Record<string, unknown>,
+  adjustRequest: AdjustWorkoutRequest,
 ): Promise<ApiResult<AdjustWorkoutResponse>> {
   if (!isSupabaseConfigured) return notConfigured();
 
   const { data, error } = await supabase.functions.invoke<AdjustWorkoutResponse>(
     'adjust-workout',
-    { body: { request, currentWorkout, context: context ?? {} } },
+    { body: adjustRequest },
   );
 
   return {

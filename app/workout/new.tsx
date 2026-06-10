@@ -4,12 +4,14 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
@@ -20,6 +22,8 @@ import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Pill } from '../../components/ui/Pill';
 import { SectionHeader } from '../../components/ui/SectionHeader';
+import { requestWorkoutAdjustment } from '../../lib/coachApi';
+import { getCoachContext } from '../../lib/coachContext';
 import type { MuscleGroup, PresetExercise } from '../../lib/exerciseLibrary';
 import { MUSCLE_GROUPS, PRESET_BY_NAME, searchPresets } from '../../lib/exerciseLibrary';
 import { getExercisePersonalBest, getProgressionRecommendation } from '../../lib/progression';
@@ -32,6 +36,7 @@ import {
   upsertExerciseToCatalog,
 } from '../../lib/supabase';
 import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import type { AdjustWorkoutResponse, WorkoutPatch } from '../../types/ai';
 import {
   calculateDurationMinutes,
   createEmptyExercise,
@@ -49,6 +54,15 @@ import type {
   ProgressionRecommendation,
 } from '../../types/supabase';
 
+const ADJUST_EXAMPLES = [
+  "I only have 35 minutes",
+  "Make it easier",
+  "I'm sore today",
+  "Replace the last exercise",
+  "Add more shoulders",
+  "Lower back feels off",
+];
+
 export default function NewWorkoutScreen() {
   const router = useRouter();
   const [workout, setWorkout] = useState<ActiveWorkout>(createEmptyWorkout());
@@ -64,6 +78,14 @@ export default function NewWorkoutScreen() {
   const [newExerciseMuscleGroup, setNewExerciseMuscleGroup] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Coach adjustment state
+  type AdjustStep = 'input' | 'loading' | 'result';
+  const [adjustModalVisible, setAdjustModalVisible] = useState(false);
+  const [adjustStep, setAdjustStep] = useState<AdjustStep>('input');
+  const [adjustRequest, setAdjustRequest] = useState('');
+  const [adjustResult, setAdjustResult] = useState<AdjustWorkoutResponse | null>(null);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadCatalog() {
@@ -248,6 +270,90 @@ export default function NewWorkoutScreen() {
             : set,
         ),
       };
+    });
+  }
+
+  function openAdjustModal() {
+    setAdjustStep('input');
+    setAdjustRequest('');
+    setAdjustResult(null);
+    setAdjustError(null);
+    setAdjustModalVisible(true);
+  }
+
+  async function handleAskCoach() {
+    const req = adjustRequest.trim();
+    if (!req) return;
+    setAdjustStep('loading');
+    setAdjustError(null);
+
+    try {
+      const ctx = await getCoachContext();
+
+      const result = await requestWorkoutAdjustment({
+        request: req,
+        currentWorkout: {
+          title: workout.title || 'Untitled Workout',
+          exercises: workout.exercises.map((e) => ({
+            exerciseName: e.exerciseName,
+            muscleGroup: e.muscleGroup || undefined,
+            sets: e.sets.map((s, i) => ({
+              setNumber: i + 1,
+              weight: s.weight || null,
+              reps: s.reps || null,
+            })),
+          })),
+        },
+        completedSetsSoFar: {},
+        profile: ctx.profile,
+        recentTraining: ctx.recentTraining,
+        personalBests: ctx.personalBests,
+        progressionRecommendations: ctx.progressionRecommendations,
+      });
+
+      if (result.error || !result.data) {
+        setAdjustError(result.error?.message ?? 'Could not reach the coach. Check your connection.');
+        setAdjustStep('result');
+      } else {
+        setAdjustResult(result.data);
+        setAdjustStep('result');
+      }
+    } catch {
+      setAdjustError('Unexpected error. Please try again.');
+      setAdjustStep('result');
+    }
+  }
+
+  function applyWorkoutPatch(patch: WorkoutPatch | null) {
+    if (!patch) return;
+
+    setWorkout((current) => {
+      let exercises = [...current.exercises];
+
+      for (const change of patch.exercises ?? []) {
+        if (change.action === 'remove') {
+          exercises = exercises.filter(
+            (e) => e.exerciseName.trim().toLowerCase() !== change.exerciseName.trim().toLowerCase(),
+          );
+        } else if (change.action === 'swap' && change.replacedByName) {
+          exercises = exercises.map((e) =>
+            e.exerciseName.trim().toLowerCase() === change.exerciseName.trim().toLowerCase()
+              ? { ...e, exerciseName: change.replacedByName! }
+              : e,
+          );
+        }
+      }
+
+      for (const add of patch.addExercises ?? []) {
+        exercises.push(
+          createEmptyExercise({
+            exerciseName: add.name,
+            muscleGroup: add.muscleGroup ?? '',
+          }),
+        );
+      }
+
+      return { ...current, exercises };
     });
   }
 
@@ -784,6 +890,13 @@ export default function NewWorkoutScreen() {
 
           <View style={styles.footerBar}>
             {error ? <ErrorState message={error} /> : null}
+            {workout.exercises.length > 0 ? (
+              <Button
+                label="Ask Coach to Adjust"
+                onPress={openAdjustModal}
+                variant="secondary"
+              />
+            ) : null}
             <Button
               label={`Finish Workout${workout.exercises.length > 0 ? ` · ${workout.exercises.length} exercise${workout.exercises.length !== 1 ? 's' : ''}` : ''}`}
               loading={saving}
@@ -792,6 +905,155 @@ export default function NewWorkoutScreen() {
           </View>
         </KeyboardAvoidingView>
       </AppScreen>
+
+      {/* Coach adjustment modal */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={adjustModalVisible}
+        onRequestClose={() => setAdjustModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setAdjustModalVisible(false)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+
+            {/* Input step */}
+            {adjustStep === 'input' && (
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.modalTitle}>Ask Coach to Adjust</Text>
+                <Text style={styles.modalSubtitle}>
+                  Tell the coach what you need. It will propose changes — you decide whether to apply.
+                </Text>
+
+                <TextInput
+                  autoFocus
+                  multiline
+                  onChangeText={setAdjustRequest}
+                  placeholder="e.g. I only have 35 minutes, replace leg press, make it easier..."
+                  placeholderTextColor={colors.textSoft}
+                  style={styles.adjustInput}
+                  value={adjustRequest}
+                />
+
+                <View style={styles.exampleChips}>
+                  {ADJUST_EXAMPLES.map((ex) => (
+                    <Pressable
+                      key={ex}
+                      onPress={() => setAdjustRequest(ex)}
+                      style={({ pressed }) => [
+                        styles.exampleChip,
+                        pressed && styles.chipPressed,
+                      ]}
+                    >
+                      <Text style={styles.exampleChipText}>{ex}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <View style={styles.modalActions}>
+                  <Button
+                    label="Cancel"
+                    onPress={() => setAdjustModalVisible(false)}
+                    variant="ghost"
+                  />
+                  <View style={styles.modalActionFlex}>
+                    <Button
+                      label="Ask Coach"
+                      onPress={() => void handleAskCoach()}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+
+            {/* Loading step */}
+            {adjustStep === 'loading' && (
+              <View style={styles.loadingStep}>
+                <ActivityIndicator color={colors.accent} size="large" />
+                <Text style={styles.loadingText}>Analyzing your workout...</Text>
+              </View>
+            )}
+
+            {/* Result step */}
+            {adjustStep === 'result' && (
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.modalTitle}>Proposed Adjustments</Text>
+
+                {adjustError ? (
+                  <>
+                    <Text style={styles.adjustError}>{adjustError}</Text>
+                    <Button
+                      label="Try Again"
+                      onPress={() => setAdjustStep('input')}
+                      variant="secondary"
+                    />
+                  </>
+                ) : adjustResult ? (
+                  <>
+                    {adjustResult.safetyNote ? (
+                      <View style={styles.safetyBanner}>
+                        <Text style={styles.safetyBannerText}>
+                          ⚠ {adjustResult.safetyNote}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.coachNoteCard}>
+                      <Text style={styles.coachNoteLabel}>COACH</Text>
+                      <Text style={styles.coachNoteText}>{adjustResult.coachNote}</Text>
+                    </View>
+
+                    {adjustResult.changes.length > 0 ? (
+                      <View style={styles.changesSection}>
+                        <Text style={styles.changesSectionLabel}>CHANGES</Text>
+                        {adjustResult.changes.map((change, i) => (
+                          <View key={i} style={styles.changeRow}>
+                            <View style={styles.changeTypeBadge}>
+                              <Text style={styles.changeTypeText}>{change.type}</Text>
+                            </View>
+                            <View style={styles.changeDetail}>
+                              <Text style={styles.changeOriginal}>{change.original}</Text>
+                              <Text style={styles.changeArrow}>→</Text>
+                              <Text style={styles.changeUpdated}>{change.updated}</Text>
+                              <Text style={styles.changeReason}>{change.reason}</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    <View style={styles.modalActions}>
+                      <Button
+                        label="Cancel"
+                        onPress={() => setAdjustModalVisible(false)}
+                        variant="ghost"
+                      />
+                      {!adjustResult.safetyNote && (
+                        <View style={styles.modalActionFlex}>
+                          <Button
+                            label="Apply Changes"
+                            onPress={() => {
+                              applyWorkoutPatch(adjustResult.updatedWorkoutPatch);
+                              setAdjustModalVisible(false);
+                            }}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </>
+                ) : null}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -1032,5 +1294,193 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.82,
+  },
+
+  // Coach adjustment modal
+  modalOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalSheet: {
+    backgroundColor: colors.backgroundElevated,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '88%',
+    paddingTop: spacing.md,
+  },
+  modalHandle: {
+    alignSelf: 'center',
+    backgroundColor: colors.borderStrong,
+    borderRadius: 3,
+    height: 4,
+    marginBottom: spacing.md,
+    width: 40,
+  },
+  modalContent: {
+    gap: spacing.lg,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: fontSizes.xxl,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  modalSubtitle: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+    marginTop: -spacing.sm,
+  },
+  adjustInput: {
+    backgroundColor: colors.surfaceInput,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: fontSizes.md,
+    minHeight: 80,
+    padding: spacing.md,
+    textAlignVertical: 'top',
+  },
+  exampleChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  exampleChip: {
+    backgroundColor: colors.surfaceCard,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
+  chipPressed: {
+    opacity: 0.72,
+  },
+  exampleChipText: {
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalActionFlex: {
+    flex: 1,
+  },
+  loadingStep: {
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingVertical: spacing.xxl * 2,
+  },
+  loadingText: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+  },
+  adjustError: {
+    color: colors.danger,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+  },
+  safetyBanner: {
+    backgroundColor: colors.dangerSurface,
+    borderColor: colors.danger,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  safetyBannerText: {
+    color: colors.danger,
+    fontSize: fontSizes.sm,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  coachNoteCard: {
+    backgroundColor: colors.surfaceAccent,
+    borderColor: colors.borderAccent,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  coachNoteLabel: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  coachNoteText: {
+    color: colors.text,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+  },
+  changesSection: {
+    gap: spacing.sm,
+  },
+  changesSectionLabel: {
+    color: colors.textSoft,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  changeRow: {
+    backgroundColor: colors.surfaceCard,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  changeTypeBadge: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    alignSelf: 'flex-start',
+  },
+  changeTypeText: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  changeDetail: {
+    flex: 1,
+    gap: 3,
+  },
+  changeOriginal: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
+    textDecorationLine: 'line-through',
+  },
+  changeArrow: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+  },
+  changeUpdated: {
+    color: colors.text,
+    fontSize: fontSizes.md,
+    fontWeight: '700',
+  },
+  changeReason: {
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
+    marginTop: 2,
   },
 });

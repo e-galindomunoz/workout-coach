@@ -1,7 +1,16 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
+import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -11,9 +20,17 @@ import { Pill } from '../../components/ui/Pill';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatCard } from '../../components/ui/StatCard';
-import { getBestSetForExercise, getExercisePersonalBest, getGroupedExerciseSessions, getProgressionRecommendation } from '../../lib/progression';
-import { getExerciseHistory } from '../../lib/supabase';
+import { getWorkoutInsight } from '../../lib/coachApi';
+import { buildSelectedExerciseContext } from '../../lib/coachContext';
+import {
+  getBestSetForExercise,
+  getExercisePersonalBest,
+  getGroupedExerciseSessions,
+  getProgressionRecommendation,
+} from '../../lib/progression';
+import { getExerciseHistory, getProfile } from '../../lib/supabase';
 import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import type { WorkoutInsightResponse } from '../../types/ai';
 import type { ExerciseLog } from '../../types/supabase';
 
 export default function ExerciseDetailScreen() {
@@ -23,6 +40,12 @@ export default function ExerciseDetailScreen() {
   const [logs, setLogs] = useState<ExerciseLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Insight state
+  const [insightModalVisible, setInsightModalVisible] = useState(false);
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightResult, setInsightResult] = useState<WorkoutInsightResponse | null>(null);
+  const [insightError, setInsightError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadExerciseHistory() {
@@ -63,6 +86,43 @@ export default function ExerciseDetailScreen() {
     [sessions],
   );
 
+  async function handleAskCoach() {
+    setInsightLoading(true);
+    setInsightError(null);
+
+    try {
+      // Build exercise-specific context from already-loaded logs + get profile
+      const [profileResult] = await Promise.all([getProfile()]);
+      const exerciseCtx = buildSelectedExerciseContext(exerciseName, logs);
+
+      const result = await getWorkoutInsight({
+        mode: 'exercise_detail',
+        exerciseName,
+        exerciseContext: exerciseCtx,
+        profile: profileResult.data
+          ? {
+              name: profileResult.data.name,
+              goal: profileResult.data.main_goal,
+              experience: profileResult.data.experience_level,
+              daysPerWeek: profileResult.data.days_per_week,
+              preferredSplit: profileResult.data.preferred_split,
+              equipment: profileResult.data.equipment,
+              injuries: profileResult.data.injuries,
+            }
+          : null,
+      });
+
+      if (result.error || !result.data) {
+        setInsightError(result.error?.message ?? 'Could not reach the coach. Check your connection.');
+      } else {
+        setInsightResult(result.data);
+        setInsightModalVisible(true);
+      }
+    } finally {
+      setInsightLoading(false);
+    }
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: exerciseName || 'Exercise Detail' }} />
@@ -90,7 +150,10 @@ export default function ExerciseDetailScreen() {
               <Text style={styles.heroValue}>{formatRecommendationTarget(recommendation)}</Text>
               <Text style={styles.heroReason}>{recommendation.reason}</Text>
               <View style={styles.heroMetaRow}>
-                <Pill label={formatRecommendationType(recommendation.recommendationType)} tone="accent" />
+                <Pill
+                  label={formatRecommendationType(recommendation.recommendationType)}
+                  tone="accent"
+                />
                 <Pill label={`${recommendation.confidence} confidence`} />
               </View>
             </GlassCard>
@@ -98,14 +161,24 @@ export default function ExerciseDetailScreen() {
             {/* PR stats grid */}
             <View style={styles.statGrid}>
               <StatCard label="Heaviest" value={formatHeaviest(personalBest)} />
-              <StatCard label="Best est. 1RM" value={formatEstimatedOneRepMax(personalBest)} accent />
+              <StatCard
+                label="Best est. 1RM"
+                value={formatEstimatedOneRepMax(personalBest)}
+                accent
+              />
               <StatCard label="Best reps" value={formatRepAtWeight(personalBest)} />
-              <StatCard label="Best volume" value={formatVolume(personalBest.highestSessionVolume.volume)} />
+              <StatCard
+                label="Best volume"
+                value={formatVolume(personalBest.highestSessionVolume.volume)}
+              />
             </View>
 
             {/* Best set detail */}
             <Card>
-              <SectionHeader title="Working data" subtitle="Your best set and most recent performance." />
+              <SectionHeader
+                title="Working data"
+                subtitle="Your best set and most recent performance."
+              />
               <Text style={styles.detailLine}>
                 Best set: {bestSet ? `${bestSet.weight ?? 'BW'} lb × ${bestSet.reps ?? '-'}` : 'N/A'}
               </Text>
@@ -113,16 +186,51 @@ export default function ExerciseDetailScreen() {
                 Last performed: {formatDate(personalBest.lastPerformedDate)}
               </Text>
               <Text style={styles.detailLine}>
-                Recent sets: {personalBest.mostRecentSets.map((set) => `${set.weight ?? 'BW'} × ${set.reps ?? '-'}`).join(', ')}
+                Recent sets:{' '}
+                {personalBest.mostRecentSets
+                  .map((set) => `${set.weight ?? 'BW'} × ${set.reps ?? '-'}`)
+                  .join(', ')}
               </Text>
+            </Card>
+
+            {/* Ask coach about this lift */}
+            <Card style={styles.coachCard}>
+              <SectionHeader
+                title="Ask Coach"
+                subtitle="AI analysis of this lift using your real history."
+              />
+              {insightError ? (
+                <Text style={styles.insightError}>{insightError}</Text>
+              ) : null}
+              <Button
+                label={
+                  insightLoading
+                    ? 'Analyzing...'
+                    : insightResult
+                    ? 'View Insight'
+                    : 'Ask Coach About This Lift'
+                }
+                loading={insightLoading}
+                onPress={
+                  insightResult
+                    ? () => setInsightModalVisible(true)
+                    : () => void handleAskCoach()
+                }
+                variant="secondary"
+              />
             </Card>
 
             {/* Recent sessions */}
             <Card>
-              <SectionHeader title="Recent sessions" subtitle="Tap any session to open its full summary." />
+              <SectionHeader
+                title="Recent sessions"
+                subtitle="Tap any session to open its full summary."
+              />
               {sessions.map((session) => {
                 const widthPercent =
-                  maxVolume > 0 ? Math.max(10, Math.round((session.totalVolume / maxVolume) * 100)) : 10;
+                  maxVolume > 0
+                    ? Math.max(10, Math.round((session.totalVolume / maxVolume) * 100))
+                    : 10;
 
                 return (
                   <Pressable
@@ -132,7 +240,9 @@ export default function ExerciseDetailScreen() {
                   >
                     <View style={styles.sessionHeader}>
                       <Text style={styles.sessionDate}>{formatDate(session.loggedAt)}</Text>
-                      <Text style={styles.sessionVolume}>{Math.round(session.totalVolume)} lb vol</Text>
+                      <Text style={styles.sessionVolume}>
+                        {Math.round(session.totalVolume)} lb vol
+                      </Text>
                     </View>
                     <ProgressBar value={widthPercent} />
                     <Text style={styles.sessionSets}>
@@ -141,7 +251,10 @@ export default function ExerciseDetailScreen() {
                         .join(', ')}
                     </Text>
                     <Text style={styles.sessionSubtext}>
-                      Top {session.topWeight ?? 'N/A'} lb · Est. 1RM {session.bestEstimatedOneRepMax ? Math.round(session.bestEstimatedOneRepMax) : 'N/A'}
+                      Top {session.topWeight ?? 'N/A'} lb · Est. 1RM{' '}
+                      {session.bestEstimatedOneRepMax
+                        ? Math.round(session.bestEstimatedOneRepMax)
+                        : 'N/A'}
                     </Text>
                   </Pressable>
                 );
@@ -150,19 +263,89 @@ export default function ExerciseDetailScreen() {
           </View>
         )}
       </AppScreen>
+
+      {/* Insight modal */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={insightModalVisible}
+        onRequestClose={() => setInsightModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setInsightModalVisible(false)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <ScrollView
+              contentContainerStyle={styles.modalContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.modalTitle}>{exerciseName}</Text>
+              <Text style={styles.modalSubtitle}>Coach Analysis</Text>
+
+              {insightResult?.safetyNote ? (
+                <View style={styles.safetyBanner}>
+                  <Text style={styles.safetyBannerText}>⚠ {insightResult.safetyNote}</Text>
+                </View>
+              ) : null}
+
+              {insightResult ? (
+                <>
+                  <Text style={styles.insightSummary}>{insightResult.summary}</Text>
+
+                  {insightResult.wins.length > 0 ? (
+                    <View style={styles.insightSection}>
+                      <Text style={styles.insightSectionLabel}>HIGHLIGHTS</Text>
+                      {insightResult.wins.map((win, i) => (
+                        <View key={i} style={styles.winRow}>
+                          <Text style={styles.winBullet}>✓</Text>
+                          <Text style={styles.winText}>{win}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {insightResult.nextFocus ? (
+                    <View style={styles.insightSection}>
+                      <Text style={styles.insightSectionLabel}>NEXT SESSION</Text>
+                      <Text style={styles.nextFocusText}>{insightResult.nextFocus}</Text>
+                    </View>
+                  ) : null}
+
+                  {insightResult.nextTargets.map((target) => (
+                    <View key={target.exerciseName} style={styles.targetCard}>
+                      <Text style={styles.targetLabel}>TARGET</Text>
+                      <Text style={styles.targetValue}>{target.target}</Text>
+                      <Text style={styles.targetReason}>{target.reason}</Text>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+
+              <Button
+                label="Close"
+                onPress={() => setInsightModalVisible(false)}
+                variant="secondary"
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
 
-function formatRecommendationTarget(recommendation: ReturnType<typeof getProgressionRecommendation>) {
+function formatRecommendationTarget(
+  recommendation: ReturnType<typeof getProgressionRecommendation>,
+) {
   if (recommendation.recommendedNextWeight === null) {
     return `Aim for ${recommendation.recommendedRepTarget}`;
   }
-
   return `Try ${recommendation.recommendedNextWeight} lb × ${recommendation.recommendedRepTarget}`;
 }
 
-function formatRecommendationType(type: ReturnType<typeof getProgressionRecommendation>['recommendationType']) {
+function formatRecommendationType(
+  type: ReturnType<typeof getProgressionRecommendation>['recommendationType'],
+) {
   switch (type) {
     case 'increase_weight':
       return 'Increase weight';
@@ -180,22 +363,18 @@ function formatRecommendationType(type: ReturnType<typeof getProgressionRecommen
 }
 
 function formatHeaviest(logs: ReturnType<typeof getExercisePersonalBest>) {
-  if (!logs.heaviestWeight.weight) {
-    return 'N/A';
-  }
-
+  if (!logs.heaviestWeight.weight) return 'N/A';
   return `${logs.heaviestWeight.weight} lb${logs.heaviestWeight.reps ? ` × ${logs.heaviestWeight.reps}` : ''}`;
 }
 
 function formatEstimatedOneRepMax(personalBest: ReturnType<typeof getExercisePersonalBest>) {
-  return personalBest.bestEstimatedOneRepMax.value ? `${Math.round(personalBest.bestEstimatedOneRepMax.value)} lb` : 'N/A';
+  return personalBest.bestEstimatedOneRepMax.value
+    ? `${Math.round(personalBest.bestEstimatedOneRepMax.value)} lb`
+    : 'N/A';
 }
 
 function formatRepAtWeight(personalBest: ReturnType<typeof getExercisePersonalBest>) {
-  if (!personalBest.bestRepAtWeight.weight || !personalBest.bestRepAtWeight.reps) {
-    return 'N/A';
-  }
-
+  if (!personalBest.bestRepAtWeight.weight || !personalBest.bestRepAtWeight.reps) return 'N/A';
   return `${personalBest.bestRepAtWeight.weight} × ${personalBest.bestRepAtWeight.reps}`;
 }
 
@@ -204,10 +383,7 @@ function formatVolume(volume: number | null) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) {
-    return 'Never';
-  }
-
+  if (!value) return 'Never';
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
@@ -250,6 +426,14 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: spacing.sm,
   },
+  coachCard: {
+    gap: spacing.md,
+  },
+  insightError: {
+    color: colors.danger,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
+  },
   sessionCard: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.border,
@@ -284,6 +468,126 @@ const styles = StyleSheet.create({
   },
   sessionSubtext: {
     color: colors.textSoft,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
+  },
+
+  // Modal
+  modalOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  modalSheet: {
+    backgroundColor: colors.backgroundElevated,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '85%',
+    paddingTop: spacing.md,
+  },
+  modalHandle: {
+    alignSelf: 'center',
+    backgroundColor: colors.borderStrong,
+    borderRadius: 3,
+    height: 4,
+    marginBottom: spacing.md,
+    width: 40,
+  },
+  modalContent: {
+    gap: spacing.lg,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
+  },
+  modalTitle: {
+    color: colors.text,
+    fontSize: fontSizes.xxl,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  modalSubtitle: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginTop: -spacing.sm,
+    textTransform: 'uppercase',
+  },
+  safetyBanner: {
+    backgroundColor: colors.dangerSurface,
+    borderColor: colors.danger,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  safetyBannerText: {
+    color: colors.danger,
+    fontSize: fontSizes.sm,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  insightSummary: {
+    color: colors.text,
+    fontSize: fontSizes.md,
+    lineHeight: 24,
+  },
+  insightSection: {
+    gap: spacing.sm,
+  },
+  insightSectionLabel: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  winRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  winBullet: {
+    color: colors.accent,
+    fontSize: fontSizes.md,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  winText: {
+    color: colors.textMuted,
+    flex: 1,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+  },
+  nextFocusText: {
+    color: colors.text,
+    fontSize: fontSizes.lg,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  targetCard: {
+    backgroundColor: colors.surfaceAccent,
+    borderColor: colors.borderAccent,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  targetLabel: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  targetValue: {
+    color: colors.text,
+    fontSize: fontSizes.xl,
+    fontWeight: '800',
+  },
+  targetReason: {
+    color: colors.textMuted,
     fontSize: fontSizes.sm,
     lineHeight: 18,
   },
