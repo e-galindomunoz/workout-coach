@@ -1,13 +1,26 @@
-import { PlaceholderScreen, ScreenLink } from '../../components/PlaceholderScreen';
+import { Redirect } from 'expo-router';
+import { AuthForm } from '../../components/AuthForm';
+import { LoadingScreen } from '../../components/LoadingScreen';
+import { useAuth } from '../../components/AuthProvider';
 
 export default function SignupScreen() {
+  const { initialized, session } = useAuth();
+
+  if (!initialized) {
+    return <LoadingScreen message="Checking your session..." />;
+  }
+
+  if (session) {
+    return <Redirect href="/tabs/dashboard" />;
+  }
+
   return (
-    <PlaceholderScreen
-      title="Signup"
-      description="Account creation will be added later. This screen is only a placeholder for Stage 0 navigation."
-    >
-      <ScreenLink href="/auth/login" label="Already have an account? Login" />
-      <ScreenLink href="/onboarding" label="Continue to Onboarding" />
-    </PlaceholderScreen>
+    <AuthForm
+      mode="signup"
+      title="Create account"
+      description="Set up your account with email and password. You can add the rest of your profile later."
+      alternateHref="/auth/login"
+      alternateLabel="Already have an account? Log in"
+    />
   );
 }

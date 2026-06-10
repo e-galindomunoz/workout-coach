@@ -1,6 +1,18 @@
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
+import { useAuth } from '../../components/AuthProvider';
+import { LoadingScreen } from '../../components/LoadingScreen';
 
 export default function TabsLayout() {
+  const { initialized, session } = useAuth();
+
+  if (!initialized) {
+    return <LoadingScreen message="Loading your account..." />;
+  }
+
+  if (!session) {
+    return <Redirect href="/auth/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{

@@ -1,13 +1,26 @@
-import { PlaceholderScreen, ScreenLink } from '../../components/PlaceholderScreen';
+import { Redirect } from 'expo-router';
+import { AuthForm } from '../../components/AuthForm';
+import { LoadingScreen } from '../../components/LoadingScreen';
+import { useAuth } from '../../components/AuthProvider';
 
 export default function LoginScreen() {
+  const { initialized, session } = useAuth();
+
+  if (!initialized) {
+    return <LoadingScreen message="Checking your session..." />;
+  }
+
+  if (session) {
+    return <Redirect href="/tabs/dashboard" />;
+  }
+
   return (
-    <PlaceholderScreen
-      title="Login"
-      description="Authentication UI will be built in a later stage. This placeholder confirms routing is wired correctly."
-    >
-      <ScreenLink href="/auth/signup" label="Need an account? Sign up" />
-      <ScreenLink href="/tabs/dashboard" label="Continue to Dashboard" />
-    </PlaceholderScreen>
+    <AuthForm
+      mode="login"
+      title="Welcome back"
+      description="Sign in with your Supabase account to open the app."
+      alternateHref="/auth/signup"
+      alternateLabel="Need an account? Create one"
+    />
   );
 }
