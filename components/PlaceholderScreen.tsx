@@ -1,6 +1,9 @@
 import { Link } from 'expo-router';
 import { PropsWithChildren } from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { AppScreen } from './AppScreen';
+import { EmptyState } from './ui/EmptyState';
+import { colors, fontSizes, radius, spacing } from '../lib/theme';
 
 type PlaceholderScreenProps = PropsWithChildren<{
   title: string;
@@ -13,14 +16,10 @@ export function PlaceholderScreen({
   children,
 }: PlaceholderScreenProps) {
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.eyebrow}>Stage 0</Text>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>{description}</Text>
-        <View style={styles.actions}>{children}</View>
-      </View>
-    </SafeAreaView>
+    <AppScreen title={title} description={description} fillContent>
+      <EmptyState title={title} description={description} />
+      {children}
+    </AppScreen>
   );
 }
 
@@ -39,46 +38,14 @@ export function ScreenLink({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#0f172a',
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-    justifyContent: 'center',
-    gap: 16,
-  },
-  eyebrow: {
-    color: '#38bdf8',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: '#f8fafc',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  description: {
-    color: '#cbd5e1',
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  actions: {
-    marginTop: 8,
-    gap: 12,
-  },
   link: {
-    color: '#0f172a',
-    backgroundColor: '#f8fafc',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    fontSize: 16,
-    fontWeight: '600',
+    backgroundColor: colors.accent,
+    borderRadius: radius.sm,
+    color: colors.background,
+    fontSize: fontSizes.lg,
+    fontWeight: '800',
     overflow: 'hidden',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
 });

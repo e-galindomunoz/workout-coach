@@ -10,10 +10,18 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { Input } from '../../components/ui/Input';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Pill } from '../../components/ui/Pill';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import type { MuscleGroup, PresetExercise } from '../../lib/exerciseLibrary';
+import { MUSCLE_GROUPS, PRESET_BY_NAME, searchPresets } from '../../lib/exerciseLibrary';
 import { getExercisePersonalBest, getProgressionRecommendation } from '../../lib/progression';
 import {
   addExerciseLogs,
@@ -23,6 +31,7 @@ import {
   getExerciseHistory,
   upsertExerciseToCatalog,
 } from '../../lib/supabase';
+import { colors, fontSizes, radius, spacing } from '../../lib/theme';
 import {
   calculateDurationMinutes,
   createEmptyExercise,
@@ -48,6 +57,9 @@ export default function NewWorkoutScreen() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [historyByExercise, setHistoryByExercise] = useState<Record<string, ExerciseLog[]>>({});
   const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+  const [exerciseSearch, setExerciseSearch] = useState('');
+  const [exerciseFilter, setExerciseFilter] = useState<MuscleGroup | null>(null);
+  const [showCustomInput, setShowCustomInput] = useState(false);
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseMuscleGroup, setNewExerciseMuscleGroup] = useState('');
   const [saving, setSaving] = useState(false);
@@ -111,10 +123,19 @@ export default function NewWorkoutScreen() {
     });
   }, [historyByExercise, historyLoading, workout.exercises]);
 
-  const suggestions = useMemo(
-    () => getExerciseSuggestions(newExerciseName, catalog, workout.exercises).slice(0, 8),
-    [catalog, newExerciseName, workout.exercises],
+  const catalogSuggestions = useMemo(
+    () => getExerciseSuggestions(exerciseSearch, catalog, workout.exercises).slice(0, 8),
+    [catalog, exerciseSearch, workout.exercises],
   );
+
+  const filteredPresets = useMemo(() => {
+    const activeNames = new Set(
+      workout.exercises.map((e) => e.exerciseName.trim().toLowerCase()),
+    );
+    return searchPresets(exerciseSearch, exerciseFilter).filter(
+      (p) => !activeNames.has(p.name.toLowerCase()),
+    );
+  }, [exerciseSearch, exerciseFilter, workout.exercises]);
 
   function updateWorkout<K extends keyof ActiveWorkout>(key: K, value: ActiveWorkout[K]) {
     setWorkout((current) => ({
@@ -163,6 +184,7 @@ export default function NewWorkoutScreen() {
 
     setNewExerciseName('');
     setNewExerciseMuscleGroup('');
+    setShowCustomInput(false);
     setError(null);
   }
 
@@ -178,8 +200,23 @@ export default function NewWorkoutScreen() {
         }),
       ],
     }));
-    setNewExerciseName('');
-    setNewExerciseMuscleGroup('');
+    setExerciseSearch('');
+    setError(null);
+  }
+
+  function addExerciseFromPreset(preset: PresetExercise) {
+    setWorkout((current) => ({
+      ...current,
+      exercises: [
+        ...current.exercises,
+        createEmptyExercise({
+          exerciseName: preset.name,
+          muscleGroup: preset.muscleGroup,
+        }),
+      ],
+    }));
+    setExerciseSearch('');
+    setExerciseFilter(null);
     setError(null);
   }
 
@@ -247,7 +284,7 @@ export default function NewWorkoutScreen() {
 
       for (const set of exercise.sets) {
         if (!set.weight.trim() && !set.reps.trim() && !set.rpe.trim() && !set.notes.trim()) {
-          setError(`Fill in something for each set in ${exercise.exerciseName}, or remove the empty set.`);
+          setError(`Fill in at least one field for each set in ${exercise.exerciseName}, or remove the empty set.`);
           return;
         }
 
@@ -341,404 +378,421 @@ export default function NewWorkoutScreen() {
         options={{
           title: 'Start Workout',
           gestureEnabled: false,
-          headerLeft: () => (
-            <Pressable onPress={confirmDiscard}>
-              <Text style={styles.headerLink}>Discard</Text>
-            </Pressable>
-          ),
         }}
       />
       <AppScreen
         title="Start Workout"
-        description="Build a workout, log each set, then save everything at the end."
+        description="Log your session, use history to guide your sets, then save when done."
         fillContent
         scrollEnabled={false}
+        headerAccessory={<Button label="Discard" onPress={confirmDiscard} variant="ghost" />}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.flex}
         >
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-            <Card title="Workout details">
-              <InputField
+            <Card accent>
+              <SectionHeader title="Workout details" subtitle="Name and context for today's session." />
+              <Input
                 label="Workout title"
                 onChangeText={(value) => updateWorkout('title', value)}
                 placeholder="Upper Body Strength"
                 value={workout.title}
               />
-              <InputField
-                label="Workout type (optional)"
+              <Input
+                label="Type (optional)"
                 onChangeText={(value) => updateWorkout('workoutType', value)}
                 placeholder="Strength, hypertrophy, conditioning"
                 value={workout.workoutType}
               />
-              <InputField
-                label="Workout notes (optional)"
+              <Input
+                label="Notes (optional)"
                 multiline
                 onChangeText={(value) => updateWorkout('notes', value)}
-                placeholder="How you felt, training focus, constraints"
+                placeholder="How you're feeling, focus for today"
                 value={workout.notes}
               />
             </Card>
 
-            <Card title="Add exercise">
-              <InputField
-                label="Exercise name"
-                onChangeText={setNewExerciseName}
-                placeholder="Bench Press"
-                value={newExerciseName}
-              />
-              <InputField
-                label="Muscle group (optional)"
-                onChangeText={setNewExerciseMuscleGroup}
-                placeholder="Chest"
-                value={newExerciseMuscleGroup}
-              />
-              <Pressable
-                accessibilityRole="button"
-                onPress={addExerciseFromInput}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.primaryButtonText}>Add Exercise</Text>
-              </Pressable>
+            <Card>
+              <SectionHeader title="Add exercise" subtitle="Filter by muscle group or search." />
 
-              <Text style={styles.sectionHint}>Previous exercises</Text>
-              {catalogLoading ? (
-                <ActivityIndicator color="#38bdf8" />
-              ) : catalogError ? (
-                <Text style={styles.errorText}>{catalogError}</Text>
-              ) : suggestions.length === 0 ? (
-                <Text style={styles.emptyText}>No matching exercises yet.</Text>
-              ) : (
-                <View style={styles.suggestionWrap}>
-                  {suggestions.map((item) => (
+              <Input
+                label="Search exercises"
+                onChangeText={setExerciseSearch}
+                placeholder="Bench press, deadlift, curls..."
+                value={exerciseSearch}
+              />
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterRow}
+              >
+                {(['All', ...MUSCLE_GROUPS] as const).map((group) => {
+                  const active = group === 'All' ? exerciseFilter === null : exerciseFilter === group;
+                  return (
                     <Pressable
-                      key={item.id}
-                      onPress={() => addExerciseFromCatalog(item)}
-                      style={({ pressed }) => [
-                        styles.suggestionChip,
-                        pressed && styles.buttonPressed,
-                      ]}
+                      key={group}
+                      onPress={() => setExerciseFilter(group === 'All' ? null : (group as MuscleGroup))}
+                      style={[styles.filterPill, active && styles.filterPillActive]}
                     >
-                      <Text style={styles.suggestionText}>{item.name}</Text>
+                      <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
+                        {group}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={styles.sectionHint}>Exercise library</Text>
+              {filteredPresets.length === 0 ? (
+                <Text style={styles.emptyText}>No exercises match.</Text>
+              ) : (
+                <>
+                  {(exerciseSearch || exerciseFilter
+                    ? filteredPresets
+                    : filteredPresets.slice(0, 12)
+                  ).map((preset) => (
+                    <Pressable
+                      key={preset.name}
+                      onPress={() => addExerciseFromPreset(preset)}
+                      style={({ pressed }) => [styles.presetRow, pressed && styles.buttonPressed]}
+                    >
+                      <View style={styles.presetRowInfo}>
+                        <Text style={styles.presetName}>{preset.name}</Text>
+                        <Text style={styles.presetMuscles}>{preset.primaryMuscles.join(' · ')}</Text>
+                      </View>
+                      <View style={styles.presetBadge}>
+                        <Text style={styles.presetBadgeText}>{preset.sets} × {preset.reps}</Text>
+                      </View>
                     </Pressable>
                   ))}
-                </View>
+                  {!exerciseSearch && !exerciseFilter && filteredPresets.length > 12 && (
+                    <Text style={styles.presetMuscles}>
+                      Filter by muscle group to see all {filteredPresets.length} exercises.
+                    </Text>
+                  )}
+                </>
+              )}
+
+              {!catalogLoading && !catalogError && catalogSuggestions.length > 0 && (
+                <>
+                  <Text style={styles.sectionHint}>Your exercises</Text>
+                  <View style={styles.suggestionWrap}>
+                    {catalogSuggestions.map((item) => (
+                      <Pressable
+                        key={item.id}
+                        onPress={() => addExerciseFromCatalog(item)}
+                        style={({ pressed }) => [
+                          styles.suggestionChip,
+                          pressed && styles.buttonPressed,
+                        ]}
+                      >
+                        <Text style={styles.suggestionText}>{item.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+              {catalogLoading && <LoadingState message="Loading your catalog..." />}
+              {catalogError && <ErrorState message={catalogError} />}
+
+              <Pressable
+                onPress={() => setShowCustomInput((v) => !v)}
+                style={styles.customToggle}
+              >
+                <Text style={styles.inlineLink}>
+                  {showCustomInput ? 'Hide custom form' : '+ Add custom exercise'}
+                </Text>
+              </Pressable>
+              {showCustomInput && (
+                <>
+                  <Input
+                    label="Exercise name"
+                    onChangeText={setNewExerciseName}
+                    placeholder="My custom movement"
+                    value={newExerciseName}
+                  />
+                  <Input
+                    label="Muscle group (optional)"
+                    onChangeText={setNewExerciseMuscleGroup}
+                    placeholder="Back"
+                    value={newExerciseMuscleGroup}
+                  />
+                  <Button label="Add Custom Exercise" onPress={addExerciseFromInput} />
+                </>
               )}
             </Card>
 
-            <Card title="Exercises">
+            <Card>
+              <SectionHeader
+                title="Exercises"
+                subtitle={`${workout.exercises.length} added · history and targets shown per lift`}
+              />
               {workout.exercises.length === 0 ? (
                 <Text style={styles.emptyText}>No exercises added yet.</Text>
               ) : (
-                workout.exercises.map((exercise, exerciseIndex) => (
-                  <View key={exercise.id} style={styles.exerciseCard}>
-                    {(() => {
-                      const historyKey = normalizeExerciseName(exercise.exerciseName);
-                      const history = historyByExercise[historyKey] ?? [];
-                      const loadingHistory = historyLoading[historyKey];
-                      const personalBest = history.length > 0 ? getExercisePersonalBest(history) : null;
-                      const recommendation =
-                        exercise.exerciseName.trim().length > 0
-                          ? getProgressionRecommendation(exercise.exerciseName.trim(), history)
-                          : null;
+                workout.exercises.map((exercise, exerciseIndex) => {
+                  const historyKey = normalizeExerciseName(exercise.exerciseName);
+                  const history = historyByExercise[historyKey] ?? [];
+                  const loadingHistory = historyLoading[historyKey];
+                  const personalBest = history.length > 0 ? getExercisePersonalBest(history) : null;
+                  const recommendation =
+                    exercise.exerciseName.trim().length > 0
+                      ? getProgressionRecommendation(exercise.exerciseName.trim(), history)
+                      : null;
 
-                      return (
-                        <View style={styles.exerciseInsightCard}>
-                          <Text style={styles.exerciseInsightTitle}>Exercise insight</Text>
-                          {loadingHistory ? (
-                            <View style={styles.inlineLoadingRow}>
-                              <ActivityIndicator color="#38bdf8" size="small" />
-                              <Text style={styles.exerciseInsightText}>Loading recent performance...</Text>
-                            </View>
-                          ) : !exercise.exerciseName.trim() ? (
-                            <Text style={styles.exerciseInsightText}>
-                              Name the exercise to pull in previous bests and progression guidance.
-                            </Text>
-                          ) : history.length === 0 || !personalBest || !recommendation ? (
-                            <>
-                              <Text style={styles.exerciseInsightText}>No history yet for this exercise.</Text>
+                  const preset = PRESET_BY_NAME.get(exercise.exerciseName.trim().toLowerCase());
+
+                  return (
+                    <View key={exercise.id} style={styles.exerciseCard}>
+                      <Card accent={Boolean(recommendation && recommendation.recommendationType !== 'not_enough_data')} style={styles.exerciseInsightCard}>
+                        <SectionHeader
+                          title={exercise.exerciseName || `Exercise ${exerciseIndex + 1}`}
+                          subtitle="Previous best and next target"
+                        />
+                        {loadingHistory ? (
+                          <View style={styles.inlineLoadingRow}>
+                            <ActivityIndicator color={colors.accent} size="small" />
+                            <Text style={styles.exerciseInsightText}>Loading history...</Text>
+                          </View>
+                        ) : !exercise.exerciseName.trim() ? (
+                          <Text style={styles.exerciseInsightText}>
+                            Name this exercise to see previous bests and a next target.
+                          </Text>
+                        ) : history.length === 0 || !personalBest || !recommendation ? (
+                          <>
+                            <Text style={styles.exerciseInsightText}>No history yet.</Text>
+                            {preset ? (
+                              <>
+                                <Text style={styles.exerciseInsightTarget}>
+                                  Recommended: {preset.sets} × {preset.reps}
+                                </Text>
+                                <Text style={styles.exerciseInsightMuted}>
+                                  Targets: {preset.primaryMuscles.join(', ')}
+                                </Text>
+                              </>
+                            ) : (
                               <Text style={styles.exerciseInsightMuted}>
-                                Recommendation: start conservatively and use this workout to set a baseline.
+                                Start conservatively and use this session to set a baseline.
                               </Text>
-                            </>
-                          ) : (
-                            <>
-                              <Text style={styles.exerciseInsightText}>
-                                Best: {formatHeaviest(personalBest)}
-                              </Text>
-                              <Text style={styles.exerciseInsightText}>
-                                Last: {recommendation.lastPerformance}
-                              </Text>
-                              <Text style={styles.exerciseInsightText}>
-                                Next: {formatRecommendationTarget(recommendation)}
-                              </Text>
-                              <Text style={styles.exerciseInsightMuted}>{recommendation.reason}</Text>
-                              {recommendation.recommendationType !== 'not_enough_data' ? (
-                                <Pressable
-                                  onPress={() => applyRecommendation(exercise.id, recommendation)}
-                                  style={({ pressed }) => [
-                                    styles.insightButton,
-                                    pressed && styles.buttonPressed,
-                                  ]}
-                                >
-                                  <Text style={styles.insightButtonText}>Apply to first set</Text>
-                                </Pressable>
-                              ) : null}
-                            </>
-                          )}
-                        </View>
-                      );
-                    })()}
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <View style={styles.insightPills}>
+                              <Pill label={`Best ${formatHeaviest(personalBest)}`} tone="accent" />
+                              <Pill label={`Last ${recommendation.lastPerformance}`} />
+                            </View>
+                            <Text style={styles.exerciseInsightTarget}>
+                              {formatRecommendationTarget(recommendation)}
+                            </Text>
+                            <Text style={styles.exerciseInsightMuted}>{recommendation.reason}</Text>
+                            {recommendation.recommendationType !== 'not_enough_data' ? (
+                              <Button
+                                label="Apply to first set"
+                                onPress={() => applyRecommendation(exercise.id, recommendation)}
+                                variant="secondary"
+                              />
+                            ) : null}
+                          </>
+                        )}
+                      </Card>
 
-                    <View style={styles.exerciseHeader}>
-                      <Text style={styles.exerciseTitle}>
-                        {exercise.exerciseName || `Exercise ${exerciseIndex + 1}`}
-                      </Text>
-                      <Pressable
-                        onPress={() =>
-                          updateWorkout(
-                            'exercises',
-                            workout.exercises.filter((item) => item.id !== exercise.id),
-                          )
-                        }
-                      >
-                        <Text style={styles.removeLink}>Remove</Text>
-                      </Pressable>
-                    </View>
-
-                    <InputField
-                      label="Exercise name"
-                      onChangeText={(value) =>
-                        updateExercise(exercise.id, (current) => ({
-                          ...current,
-                          exerciseName: value,
-                        }))
-                      }
-                      placeholder="Exercise name"
-                      value={exercise.exerciseName}
-                    />
-                    <InputField
-                      label="Muscle group (optional)"
-                      onChangeText={(value) =>
-                        updateExercise(exercise.id, (current) => ({
-                          ...current,
-                          muscleGroup: value,
-                        }))
-                      }
-                      placeholder="Back"
-                      value={exercise.muscleGroup}
-                    />
-                    <InputField
-                      label="Exercise notes (optional)"
-                      multiline
-                      onChangeText={(value) =>
-                        updateExercise(exercise.id, (current) => ({
-                          ...current,
-                          notes: value,
-                        }))
-                      }
-                      placeholder="Tempo, setup, attachments"
-                      value={exercise.notes}
-                    />
-
-                    {exercise.sets.map((set, setIndex) => (
-                      <View key={set.id} style={styles.setCard}>
-                        <View style={styles.setHeader}>
-                          <Text style={styles.setTitle}>Set {setIndex + 1}</Text>
-                          <View style={styles.rowActions}>
-                            <Pressable
-                              onPress={() =>
-                                updateExercise(exercise.id, (current) => {
-                                  const currentSet = current.sets.find((item) => item.id === set.id);
-                                  if (!currentSet) {
-                                    return current;
-                                  }
-
-                                  return {
-                                    ...current,
-                                    sets: [
-                                      ...current.sets,
-                                      {
-                                        ...currentSet,
-                                        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                                      },
-                                    ],
-                                  };
-                                })
-                              }
-                            >
-                              <Text style={styles.inlineLink}>Duplicate</Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() =>
-                                updateExercise(exercise.id, (current) => ({
-                                  ...current,
-                                  sets:
-                                    current.sets.length === 1
-                                      ? current.sets
-                                      : current.sets.filter((item) => item.id !== set.id),
-                                }))
-                              }
-                            >
-                              <Text style={styles.inlineDangerLink}>Remove</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-
-                        <View style={styles.twoColumnRow}>
-                          <InputField
-                            keyboardType="decimal-pad"
-                            label="Weight"
-                            onChangeText={(value) =>
-                              updateSet(exercise.id, set.id, (current) => ({
-                                ...current,
-                                weight: value,
-                              }))
-                            }
-                            placeholder="135"
-                            value={set.weight}
-                          />
-                          <InputField
-                            keyboardType="number-pad"
-                            label="Reps"
-                            onChangeText={(value) =>
-                              updateSet(exercise.id, set.id, (current) => ({
-                                ...current,
-                                reps: value,
-                              }))
-                            }
-                            placeholder="8"
-                            value={set.reps}
-                          />
-                        </View>
-
-                        <View style={styles.twoColumnRow}>
-                          <InputField
-                            keyboardType="decimal-pad"
-                            label="RPE (optional)"
-                            onChangeText={(value) =>
-                              updateSet(exercise.id, set.id, (current) => ({
-                                ...current,
-                                rpe: value,
-                              }))
-                            }
-                            placeholder="8.5"
-                            value={set.rpe}
-                          />
-                          <View style={styles.switchCard}>
-                            <Text style={styles.label}>Pain / discomfort</Text>
-                            <Switch
-                              onValueChange={(value) =>
-                                updateSet(exercise.id, set.id, (current) => ({
-                                  ...current,
-                                  painFlag: value,
-                                }))
-                              }
-                              value={set.painFlag}
-                            />
-                          </View>
-                        </View>
-
-                        <InputField
-                          label="Set notes (optional)"
-                          multiline
-                          onChangeText={(value) =>
-                            updateSet(exercise.id, set.id, (current) => ({
-                              ...current,
-                              notes: value,
-                            }))
+                      <View style={styles.exerciseRow}>
+                        <Text style={styles.exerciseLabel}>Exercise setup</Text>
+                        <Button
+                          label="Remove"
+                          onPress={() =>
+                            updateWorkout(
+                              'exercises',
+                              workout.exercises.filter((item) => item.id !== exercise.id),
+                            )
                           }
-                          placeholder="Last rep slowed, switched grip, etc."
-                          value={set.notes}
+                          variant="ghost"
                         />
                       </View>
-                    ))}
 
-                    <Pressable
-                      onPress={() =>
-                        updateExercise(exercise.id, (current) => ({
-                          ...current,
-                          sets: [...current.sets, createEmptySet()],
-                        }))
-                      }
-                      style={({ pressed }) => [
-                        styles.secondaryButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                    >
-                      <Text style={styles.secondaryButtonText}>Add Set</Text>
-                    </Pressable>
-                  </View>
-                ))
+                      <Input
+                        label="Exercise name"
+                        onChangeText={(value) =>
+                          updateExercise(exercise.id, (current) => ({
+                            ...current,
+                            exerciseName: value,
+                          }))
+                        }
+                        placeholder="Exercise name"
+                        value={exercise.exerciseName}
+                      />
+                      <Input
+                        label="Muscle group (optional)"
+                        onChangeText={(value) =>
+                          updateExercise(exercise.id, (current) => ({
+                            ...current,
+                            muscleGroup: value,
+                          }))
+                        }
+                        placeholder="Back"
+                        value={exercise.muscleGroup}
+                      />
+                      <Input
+                        label="Exercise notes (optional)"
+                        multiline
+                        onChangeText={(value) =>
+                          updateExercise(exercise.id, (current) => ({
+                            ...current,
+                            notes: value,
+                          }))
+                        }
+                        placeholder="Tempo, setup, cues"
+                        value={exercise.notes}
+                      />
+
+                      {exercise.sets.map((set, setIndex) => (
+                        <Card key={set.id} style={styles.setCard}>
+                          <View style={styles.setHeader}>
+                            <Text style={styles.setTitle}>Set {setIndex + 1}</Text>
+                            <View style={styles.rowActions}>
+                              <Pressable
+                                onPress={() =>
+                                  updateExercise(exercise.id, (current) => {
+                                    const currentSet = current.sets.find((item) => item.id === set.id);
+                                    if (!currentSet) {
+                                      return current;
+                                    }
+
+                                    return {
+                                      ...current,
+                                      sets: [
+                                        ...current.sets,
+                                        {
+                                          ...currentSet,
+                                          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                                        },
+                                      ],
+                                    };
+                                  })
+                                }
+                              >
+                                <Text style={styles.inlineLink}>Duplicate</Text>
+                              </Pressable>
+                              <Pressable
+                                onPress={() =>
+                                  updateExercise(exercise.id, (current) => ({
+                                    ...current,
+                                    sets:
+                                      current.sets.length === 1
+                                        ? current.sets
+                                        : current.sets.filter((item) => item.id !== set.id),
+                                  }))
+                                }
+                              >
+                                <Text style={styles.inlineDangerLink}>Remove</Text>
+                              </Pressable>
+                            </View>
+                          </View>
+
+                          <View style={styles.twoColumnRow}>
+                            <Input
+                              keyboardType="decimal-pad"
+                              label="Weight (lb)"
+                              onChangeText={(value) =>
+                                updateSet(exercise.id, set.id, (current) => ({
+                                  ...current,
+                                  weight: value,
+                                }))
+                              }
+                              placeholder="135"
+                              value={set.weight}
+                            />
+                            <Input
+                              keyboardType="number-pad"
+                              label="Reps"
+                              onChangeText={(value) =>
+                                updateSet(exercise.id, set.id, (current) => ({
+                                  ...current,
+                                  reps: value,
+                                }))
+                              }
+                              placeholder="8"
+                              value={set.reps}
+                            />
+                          </View>
+
+                          <View style={styles.twoColumnRow}>
+                            <Input
+                              keyboardType="decimal-pad"
+                              label="RPE (optional)"
+                              onChangeText={(value) =>
+                                updateSet(exercise.id, set.id, (current) => ({
+                                  ...current,
+                                  rpe: value,
+                                }))
+                              }
+                              placeholder="8.5"
+                              value={set.rpe}
+                            />
+                            <View style={styles.switchCard}>
+                              <Text style={styles.switchLabel}>Pain flag</Text>
+                              <Switch
+                                onValueChange={(value) =>
+                                  updateSet(exercise.id, set.id, (current) => ({
+                                    ...current,
+                                    painFlag: value,
+                                  }))
+                                }
+                                thumbColor={set.painFlag ? colors.danger : colors.textSoft}
+                                trackColor={{ false: colors.surfaceAlt, true: colors.dangerSurface }}
+                                value={set.painFlag}
+                              />
+                            </View>
+                          </View>
+
+                          <Input
+                            label="Set notes (optional)"
+                            multiline
+                            onChangeText={(value) =>
+                              updateSet(exercise.id, set.id, (current) => ({
+                                ...current,
+                                notes: value,
+                              }))
+                            }
+                            placeholder="Last rep slow, switched grip, etc."
+                            value={set.notes}
+                          />
+                        </Card>
+                      ))}
+
+                      <Button
+                        label="+ Add Set"
+                        onPress={() =>
+                          updateExercise(exercise.id, (current) => ({
+                            ...current,
+                            sets: [...current.sets, createEmptySet()],
+                          }))
+                        }
+                        variant="secondary"
+                      />
+                    </View>
+                  );
+                })
               )}
             </Card>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={saving}
-              onPress={() => void handleFinishWorkout()}
-              style={({ pressed }) => [
-                styles.finishButton,
-                (saving || pressed) && styles.buttonPressed,
-              ]}
-            >
-              {saving ? (
-                <ActivityIndicator color="#0f172a" />
-              ) : (
-                <Text style={styles.finishButtonText}>Finish Workout</Text>
-              )}
-            </Pressable>
           </ScrollView>
+
+          <View style={styles.footerBar}>
+            {error ? <ErrorState message={error} /> : null}
+            <Button
+              label={`Finish Workout${workout.exercises.length > 0 ? ` · ${workout.exercises.length} exercise${workout.exercises.length !== 1 ? 's' : ''}` : ''}`}
+              loading={saving}
+              onPress={() => void handleFinishWorkout()}
+            />
+          </View>
         </KeyboardAvoidingView>
       </AppScreen>
     </>
-  );
-}
-
-function Card({
-  title,
-  children,
-}: {
-  title: string;
-  children: import('react').ReactNode;
-}) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{title}</Text>
-      <View style={styles.cardContent}>{children}</View>
-    </View>
-  );
-}
-
-function InputField({
-  label,
-  multiline = false,
-  ...props
-}: {
-  label: string;
-  multiline?: boolean;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
-}) {
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        multiline={multiline}
-        placeholderTextColor="#64748b"
-        style={[styles.input, multiline && styles.inputMultiline]}
-        textAlignVertical={multiline ? 'top' : 'center'}
-        {...props}
-      />
-    </View>
   );
 }
 
@@ -748,11 +802,11 @@ function normalizeExerciseName(value: string) {
 
 function formatHeaviest(personalBest: PersonalBestSummary) {
   if (!personalBest.heaviestWeight.weight) {
-    return 'No load yet';
+    return 'no load';
   }
 
   if (personalBest.heaviestWeight.reps) {
-    return `${personalBest.heaviestWeight.weight} lb x ${personalBest.heaviestWeight.reps}`;
+    return `${personalBest.heaviestWeight.weight} lb × ${personalBest.heaviestWeight.reps}`;
   }
 
   return `${personalBest.heaviestWeight.weight} lb`;
@@ -760,213 +814,164 @@ function formatHeaviest(personalBest: PersonalBestSummary) {
 
 function formatRecommendationTarget(recommendation: ProgressionRecommendation) {
   if (recommendation.recommendedNextWeight === null) {
-    return recommendation.recommendedRepTarget;
+    return `Next: ${recommendation.recommendedRepTarget}`;
   }
 
-  return `${recommendation.recommendedNextWeight} lb for ${recommendation.recommendedRepTarget}`;
+  return `Next: ${recommendation.recommendedNextWeight} lb × ${recommendation.recommendedRepTarget}`;
 }
 
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  headerLink: {
-    color: '#fca5a5',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   content: {
-    gap: 16,
-    paddingBottom: 40,
+    gap: spacing.lg,
+    paddingBottom: 160,
   },
-  card: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 18,
+  sectionHint: {
+    color: colors.textSoft,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  filterPill: {
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    padding: 18,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
   },
-  cardTitle: {
-    color: '#f8fafc',
-    fontSize: 20,
+  filterPillActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  filterPillText: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
     fontWeight: '700',
-    marginBottom: 14,
   },
-  cardContent: {
-    gap: 14,
+  filterPillTextActive: {
+    color: colors.background,
   },
-  fieldGroup: {
+  presetRow: {
+    alignItems: 'center',
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.md,
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+  },
+  presetRowInfo: {
     flex: 1,
-    gap: 8,
+    gap: 3,
   },
-  label: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '600',
+  presetName: {
+    color: colors.text,
+    fontSize: fontSizes.md,
+    fontWeight: '700',
   },
-  input: {
-    backgroundColor: '#020617',
-    borderColor: '#334155',
-    borderRadius: 12,
+  presetMuscles: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xs,
+    lineHeight: 16,
+  },
+  presetBadge: {
+    backgroundColor: colors.surfaceAccent,
+    borderColor: colors.borderAccent,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    color: '#f8fafc',
-    fontSize: 16,
-    minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
   },
-  inputMultiline: {
-    minHeight: 90,
+  presetBadgeText: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
   },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#38bdf8',
-    borderRadius: 14,
-    justifyContent: 'center',
-    minHeight: 52,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  secondaryButtonText: {
-    color: '#f8fafc',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  finishButton: {
-    alignItems: 'center',
-    backgroundColor: '#38bdf8',
-    borderRadius: 16,
-    justifyContent: 'center',
-    minHeight: 56,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  finishButtonText: {
-    color: '#0f172a',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  buttonPressed: {
-    opacity: 0.84,
+  customToggle: {
+    paddingVertical: spacing.sm,
   },
   suggestionWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing.sm,
   },
   suggestionChip: {
-    backgroundColor: '#020617',
-    borderColor: '#334155',
-    borderRadius: 999,
+    backgroundColor: colors.surfaceCard,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
   },
   suggestionText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  sectionHint: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  emptyText: {
-    color: '#94a3b8',
-    fontSize: 14,
+    color: colors.text,
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
   },
   exerciseCard: {
-    backgroundColor: '#0b1220',
-    borderColor: '#1f2937',
-    borderRadius: 16,
+    backgroundColor: colors.surfaceCard,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     borderWidth: 1,
-    gap: 14,
-    padding: 14,
+    gap: spacing.md,
+    marginTop: spacing.md,
+    padding: spacing.lg,
   },
   exerciseInsightCard: {
-    backgroundColor: '#111827',
-    borderColor: '#334155',
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 8,
-    padding: 12,
-  },
-  exerciseInsightTitle: {
-    color: '#38bdf8',
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+    gap: spacing.md,
+    padding: spacing.md,
   },
   exerciseInsightText: {
-    color: '#e2e8f0',
-    fontSize: 14,
+    color: colors.text,
+    fontSize: fontSizes.md,
     lineHeight: 20,
   },
   exerciseInsightMuted: {
-    color: '#94a3b8',
-    fontSize: 13,
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
     lineHeight: 18,
+  },
+  exerciseInsightTarget: {
+    color: colors.accent,
+    fontSize: fontSizes.xl,
+    fontWeight: '800',
+    lineHeight: 28,
   },
   inlineLoadingRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
-  insightButton: {
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  insightPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  insightButtonText: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  exerciseHeader: {
+  exerciseRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  exerciseTitle: {
-    color: '#f8fafc',
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    marginRight: 12,
-  },
-  removeLink: {
-    color: '#fca5a5',
-    fontSize: 14,
-    fontWeight: '700',
+  exerciseLabel: {
+    color: colors.text,
+    fontSize: fontSizes.lg,
+    fontWeight: '800',
   },
   setCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
-    padding: 12,
+    gap: spacing.md,
+    padding: spacing.md,
   },
   setHeader: {
     alignItems: 'center',
@@ -974,42 +979,58 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   setTitle: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '700',
+    color: colors.text,
+    fontSize: fontSizes.lg,
+    fontWeight: '800',
   },
   rowActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   inlineLink: {
-    color: '#38bdf8',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.accent,
+    fontSize: fontSizes.sm,
+    fontWeight: '800',
   },
   inlineDangerLink: {
-    color: '#fca5a5',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.danger,
+    fontSize: fontSizes.sm,
+    fontWeight: '800',
   },
   twoColumnRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   switchCard: {
-    backgroundColor: '#020617',
-    borderColor: '#334155',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceInput,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
     borderWidth: 1,
     flex: 1,
     justifyContent: 'space-between',
-    minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    minHeight: 54,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
-    lineHeight: 20,
+  switchLabel: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+    fontWeight: '700',
+  },
+  footerBar: {
+    backgroundColor: colors.glassBar,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    bottom: 0,
+    gap: spacing.sm,
+    left: 0,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    position: 'absolute',
+    right: 0,
+  },
+  buttonPressed: {
+    opacity: 0.82,
   },
 });

@@ -1,121 +1,269 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
-import { getAllPersonalBests } from '../../lib/progression';
-import { getAllExerciseLogs } from '../../lib/supabase';
-import type { ExerciseLog, PersonalBestSummary } from '../../types/supabase';
+import { Card } from '../../components/ui/Card';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { Input } from '../../components/ui/Input';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Pill } from '../../components/ui/Pill';
+import { ProgressBar } from '../../components/ui/ProgressBar';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { StatCard } from '../../components/ui/StatCard';
+import { getAllPersonalBests, getExerciseSessionVolume } from '../../lib/progression';
+import { getAllExerciseLogs, getBodyMetrics, getRecentWorkoutSessions } from '../../lib/supabase';
+import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { getWorkoutsThisWeekCount } from '../../lib/workouts';
+import type { BodyMetric, ExerciseLog, PersonalBestSummary, WorkoutSession } from '../../types/supabase';
 
 export default function ProgressScreen() {
   const router = useRouter();
   const [logs, setLogs] = useState<ExerciseLog[]>([]);
+  const [metrics, setMetrics] = useState<BodyMetric[]>([]);
+  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadLogs = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    const result = await getAllExerciseLogs();
-
-    if (result.error) {
-      setError(result.error.message);
-      setLogs([]);
-      setLoading(false);
-      return;
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
     }
 
-    setLogs(result.data ?? []);
+    setError(null);
+
+    const [logsResult, metricsResult, sessionsResult] = await Promise.all([
+      getAllExerciseLogs(),
+      getBodyMetrics(),
+      getRecentWorkoutSessions(24),
+    ]);
+
+    if (logsResult.error) {
+      setError(logsResult.error.message);
+      setLogs([]);
+    } else {
+      setLogs(logsResult.data ?? []);
+    }
+
+    if (metricsResult.error) {
+      setError(metricsResult.error.message);
+      setMetrics([]);
+    } else {
+      setMetrics(metricsResult.data ?? []);
+    }
+
+    if (sessionsResult.error) {
+      setError(sessionsResult.error.message);
+      setSessions([]);
+    } else {
+      setSessions(sessionsResult.data ?? []);
+    }
+
     setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
-    void loadLogs();
-  }, [loadLogs]);
+    void loadData();
+  }, [loadData]);
 
   const personalBests = useMemo(() => getAllPersonalBests(logs), [logs]);
+  const filteredBests = useMemo(() => {
+    if (!search.trim()) {
+      return personalBests;
+    }
+
+    const query = search.trim().toLowerCase();
+    return personalBests.filter((item) => item.exerciseName.toLowerCase().includes(query));
+  }, [personalBests, search]);
+  const workoutsThisWeek = useMemo(() => getWorkoutsThisWeekCount(sessions), [sessions]);
+  const weightDelta = metrics.length >= 2 ? metrics[0].weight - metrics[1].weight : null;
+  const weeklyConsistency = useMemo(() => {
+    const counts = [0, 0, 0, 0];
+    const now = new Date();
+
+    sessions.forEach((session) => {
+      const diffMs = now.getTime() - new Date(session.started_at).getTime();
+      const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+
+      if (diffWeeks >= 0 && diffWeeks < 4) {
+        counts[3 - diffWeeks] += 1;
+      }
+    });
+
+    return counts;
+  }, [sessions]);
+  const maxWeekCount = Math.max(...weeklyConsistency, 1);
 
   return (
     <AppScreen
       title="Progress"
-      description="Review personal bests, recent lift trends, and what your logs say about your next step."
+      description="Personal bests, bodyweight trend, and training consistency."
+      refreshing={refreshing}
+      onRefresh={() => void loadData(true)}
     >
-      <View style={styles.content}>
-        <View style={styles.heroCard}>
-          <Text style={styles.heroValue}>{personalBests.length}</Text>
-          <Text style={styles.heroLabel}>Tracked exercises with history</Text>
-          <Text style={styles.heroHint}>
-            Tap any exercise to inspect its best sets, recent sessions, and next recommendation.
-          </Text>
-        </View>
+      {loading ? (
+        <LoadingState message="Loading your progress..." />
+      ) : (
+        <View style={styles.content}>
+          {error ? <ErrorState message={error} /> : null}
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Personal Bests</Text>
+          <View style={styles.statRow}>
+            <StatCard
+              label="Tracked lifts"
+              value={`${personalBests.length}`}
+              caption="Exercises with history"
+              accent
+              style={styles.statFlex}
+            />
+            <StatCard
+              label="This week"
+              value={`${workoutsThisWeek}`}
+              caption="Sessions trained"
+              style={styles.statFlex}
+            />
+          </View>
 
-          {loading ? (
-            <View style={styles.stateBlock}>
-              <ActivityIndicator color="#38bdf8" />
-              <Text style={styles.stateText}>Loading personal bests...</Text>
-            </View>
-          ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : personalBests.length === 0 ? (
-            <Text style={styles.emptyText}>
-              No exercise history yet. Finish a workout to populate personal bests.
-            </Text>
-          ) : (
-            personalBests.map((item) => (
-              <Pressable
-                key={item.exerciseName}
-                onPress={() =>
-                  router.push({
-                    pathname: '/progress/[exerciseName]',
-                    params: { exerciseName: item.exerciseName },
-                  })
-                }
-                style={({ pressed }) => [styles.exerciseCard, pressed && styles.buttonPressed]}
-              >
-                <View style={styles.exerciseHeader}>
-                  <View style={styles.exerciseMeta}>
-                    <Text style={styles.exerciseName}>{item.exerciseName}</Text>
-                    <Text style={styles.exerciseSubtext}>
-                      {item.muscleGroup ?? 'Muscle group not set'}
-                    </Text>
-                  </View>
-                  <Text style={styles.linkText}>View</Text>
-                </View>
-
-                <View style={styles.statGrid}>
-                  <MiniStat
-                    label="Heaviest"
-                    value={formatHeaviest(item)}
-                  />
-                  <MiniStat
-                    label="Best est. 1RM"
-                    value={formatEstimatedOneRepMax(item)}
-                  />
-                </View>
-
-                <Text style={styles.detailLine}>Best set: {formatBestSet(item)}</Text>
-                <Text style={styles.detailLine}>
-                  Last performed: {formatDate(item.lastPerformedDate)}
+          <Card>
+            <SectionHeader title="Weight trend" subtitle="Your latest bodyweight movement." />
+            {metrics.length === 0 ? (
+              <EmptyState
+                title="No weight data yet"
+                description="Log bodyweight on the Dashboard to see your trend here."
+              />
+            ) : (
+              <>
+                <Text style={styles.trendNumber}>{metrics[0].weight} lb</Text>
+                <Text style={styles.trendLabel}>
+                  Latest · {formatDate(metrics[0].logged_at)}
                 </Text>
-              </Pressable>
-            ))
-          )}
+                <Text style={styles.trendDetail}>
+                  {weightDelta === null
+                    ? 'Add one more check-in to see your recent change.'
+                    : `Recent change: ${weightDelta > 0 ? '+' : ''}${weightDelta.toFixed(1)} lb vs previous entry.`}
+                </Text>
+              </>
+            )}
+          </Card>
+
+          <Card>
+            <SectionHeader title="Training consistency" subtitle="Sessions per week over the last four weeks." />
+            <View style={styles.consistencyList}>
+              {weeklyConsistency.map((count, index) => (
+                <View key={`week-${index}`} style={styles.consistencyRow}>
+                  <Text style={styles.consistencyLabel}>
+                    {index === 3 ? 'This wk' : `${3 - index} wks ago`}
+                  </Text>
+                  <View style={styles.consistencyBarWrap}>
+                    <ProgressBar value={(count / maxWeekCount) * 100} />
+                  </View>
+                  <Text style={styles.consistencyValue}>{count}</Text>
+                </View>
+              ))}
+            </View>
+          </Card>
+
+          <Card>
+            <SectionHeader title="Personal bests" subtitle="Tap any lift for full stats and your next target." />
+            <Input
+              label="Search exercises"
+              onChangeText={setSearch}
+              placeholder="Deadlift, bench press, squat..."
+              value={search}
+            />
+
+            {filteredBests.length === 0 ? (
+              <EmptyState
+                title={personalBests.length === 0 ? 'No exercise history yet' : 'No matching lifts'}
+                description={
+                  personalBests.length === 0
+                    ? 'Log your first workout to start building personal bests.'
+                    : 'Try a different search term.'
+                }
+              />
+            ) : (
+              filteredBests.map((item) => (
+                <Pressable
+                  key={item.exerciseName}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/progress/[exerciseName]',
+                      params: { exerciseName: item.exerciseName },
+                    })
+                  }
+                  style={({ pressed }) => [styles.exerciseCard, pressed && styles.rowPressed]}
+                >
+                  <View style={styles.exerciseHeader}>
+                    <View style={styles.exerciseMeta}>
+                      <Text style={styles.exerciseName}>{item.exerciseName}</Text>
+                      <Text style={styles.exerciseSubtext}>
+                        {item.muscleGroup ?? 'Muscle group not set'}
+                      </Text>
+                    </View>
+                    <Pill label={formatTrend(item)} tone={getTrendTone(item)} />
+                  </View>
+
+                  <View style={styles.bestRow}>
+                    <Text style={styles.bestLabel}>Heaviest</Text>
+                    <Text style={styles.bestValue}>{formatHeaviest(item)}</Text>
+                  </View>
+                  <View style={styles.bestRow}>
+                    <Text style={styles.bestLabel}>Est. 1RM</Text>
+                    <Text style={styles.bestValue}>{formatEstimatedOneRepMax(item)}</Text>
+                  </View>
+                  <View style={styles.bestRow}>
+                    <Text style={styles.bestLabel}>Best volume</Text>
+                    <Text style={styles.bestValue}>{formatVolume(item)}</Text>
+                  </View>
+                  <Text style={styles.exerciseFooter}>Last performed {formatDate(item.lastPerformedDate ?? new Date().toISOString())}</Text>
+                </Pressable>
+              ))
+            )}
+          </Card>
         </View>
-      </View>
+      )}
     </AppScreen>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.miniStat}>
-      <Text style={styles.miniStatLabel}>{label}</Text>
-      <Text style={styles.miniStatValue}>{value}</Text>
-    </View>
-  );
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value));
+}
+
+function formatTrend(item: PersonalBestSummary) {
+  if (item.recentTrend === 'insufficient_data') {
+    return 'Needs data';
+  }
+
+  if (item.recentTrend === 'up') {
+    return 'Trending up';
+  }
+
+  if (item.recentTrend === 'down') {
+    return 'Trending down';
+  }
+
+  return 'Stable';
+}
+
+function getTrendTone(item: PersonalBestSummary) {
+  if (item.recentTrend === 'up') {
+    return 'success' as const;
+  }
+
+  if (item.recentTrend === 'down') {
+    return 'warning' as const;
+  }
+
+  return 'default' as const;
 }
 
 function formatHeaviest(item: PersonalBestSummary) {
@@ -123,11 +271,7 @@ function formatHeaviest(item: PersonalBestSummary) {
     return 'No load yet';
   }
 
-  if (item.heaviestWeight.reps) {
-    return `${item.heaviestWeight.weight} lb x ${item.heaviestWeight.reps}`;
-  }
-
-  return `${item.heaviestWeight.weight} lb`;
+  return `${item.heaviestWeight.weight} lb${item.heaviestWeight.reps ? ` × ${item.heaviestWeight.reps}` : ''}`;
 }
 
 function formatEstimatedOneRepMax(item: PersonalBestSummary) {
@@ -138,151 +282,118 @@ function formatEstimatedOneRepMax(item: PersonalBestSummary) {
   return `${Math.round(item.bestEstimatedOneRepMax.value)} lb`;
 }
 
-function formatBestSet(item: PersonalBestSummary) {
-  if (!item.bestEstimatedOneRepMax.weight || !item.bestEstimatedOneRepMax.reps) {
-    return 'No working sets yet';
+function formatVolume(item: PersonalBestSummary) {
+  if (!item.highestSessionVolume.volume) {
+    return 'N/A';
   }
 
-  return `${item.bestEstimatedOneRepMax.weight} lb x ${item.bestEstimatedOneRepMax.reps}`;
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return 'Never';
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(value));
+  return `${Math.round(item.highestSessionVolume.volume)} lb`;
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 16,
-    paddingBottom: 40,
+    gap: spacing.lg,
+    paddingBottom: 100,
   },
-  heroCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 8,
-    padding: 18,
+  statRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
   },
-  heroValue: {
-    color: '#f8fafc',
-    fontSize: 32,
+  statFlex: {
+    flex: 1,
+  },
+  trendNumber: {
+    color: colors.text,
+    fontSize: 34,
     fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  heroLabel: {
-    color: '#e2e8f0',
-    fontSize: 16,
+  trendLabel: {
+    color: colors.accent,
+    fontSize: fontSizes.sm,
     fontWeight: '700',
+    marginTop: 4,
   },
-  heroHint: {
-    color: '#94a3b8',
-    fontSize: 14,
-    lineHeight: 20,
+  trendDetail: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+    marginTop: spacing.sm,
   },
-  sectionCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 18,
+  consistencyList: {
+    gap: spacing.md,
+    marginTop: spacing.sm,
   },
-  sectionTitle: {
-    color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  stateBlock: {
+  consistencyRow: {
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 16,
+    flexDirection: 'row',
+    gap: spacing.md,
   },
-  stateText: {
-    color: '#cbd5e1',
-    fontSize: 14,
+  consistencyLabel: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xs,
+    fontWeight: '700',
+    width: 58,
   },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
-    lineHeight: 20,
+  consistencyBarWrap: {
+    flex: 1,
   },
-  emptyText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    lineHeight: 20,
+  consistencyValue: {
+    color: colors.text,
+    fontSize: fontSizes.md,
+    fontWeight: '800',
+    textAlign: 'right',
+    width: 20,
   },
   exerciseCard: {
-    backgroundColor: '#0b1220',
-    borderColor: '#1f2937',
-    borderRadius: 16,
+    backgroundColor: colors.surfaceCard,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     borderWidth: 1,
-    gap: 12,
-    marginTop: 12,
-    padding: 16,
+    gap: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.lg,
   },
-  buttonPressed: {
-    opacity: 0.84,
+  rowPressed: {
+    opacity: 0.82,
   },
   exerciseHeader: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: spacing.md,
     justifyContent: 'space-between',
   },
   exerciseMeta: {
     flex: 1,
     gap: 4,
-    marginRight: 12,
   },
   exerciseName: {
-    color: '#f8fafc',
-    fontSize: 18,
-    fontWeight: '700',
+    color: colors.text,
+    fontSize: fontSizes.xl,
+    fontWeight: '800',
   },
   exerciseSubtext: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  linkText: {
-    color: '#38bdf8',
-    fontSize: 14,
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
     fontWeight: '700',
   },
-  statGrid: {
+  bestRow: {
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
   },
-  miniStat: {
-    backgroundColor: '#111827',
-    borderColor: '#334155',
-    borderRadius: 14,
-    borderWidth: 1,
-    flex: 1,
-    minHeight: 76,
-    padding: 12,
+  bestLabel: {
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
   },
-  miniStatLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+  bestValue: {
+    color: colors.text,
+    fontSize: fontSizes.md,
+    fontWeight: '800',
   },
-  miniStatValue: {
-    color: '#f8fafc',
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  detailLine: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    lineHeight: 20,
+  exerciseFooter: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
+    marginTop: spacing.xs,
   },
 });

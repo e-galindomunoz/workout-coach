@@ -1,9 +1,15 @@
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
 import { useAuth } from '../../components/AuthProvider';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { Pill } from '../../components/ui/Pill';
+import { SectionHeader } from '../../components/ui/SectionHeader';
 import { supabase } from '../../lib/supabase';
+import { colors, fontSizes, spacing } from '../../lib/theme';
 
 export default function SettingsScreen() {
   const { profile, user } = useAuth();
@@ -26,86 +32,74 @@ export default function SettingsScreen() {
   return (
     <AppScreen
       title="Settings"
-      description="Your auth session is active. Profile settings and preferences will be added in a later stage."
+      description="Account, profile, and Phase 1 status."
     >
-      <View style={styles.card}>
-        <Text style={styles.label}>Signed in as</Text>
-        <Text style={styles.value}>{user?.email ?? 'Unknown user'}</Text>
-      </View>
+      <Card accent>
+        <SectionHeader title="Account" subtitle="Your authenticated session." />
+        <Pill label="Signed in" tone="success" />
+        <Text style={styles.value}>{user?.email ?? 'Unknown'}</Text>
+      </Card>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Current profile</Text>
+      <Card>
+        <SectionHeader title="Fitness profile" subtitle="Your onboarding data powering the app." />
         <Text style={styles.value}>
-          {profile?.name ? `${profile.name} · ${profile.main_goal ?? 'goal pending'}` : 'Profile incomplete'}
+          {profile?.name
+            ? `${profile.name}${profile.main_goal ? ` · ${profile.main_goal}` : ''}`
+            : 'Profile incomplete'}
         </Text>
         <Link href="/settings/profile" style={styles.editLink}>
-          Edit fitness profile
+          Edit profile
         </Link>
-      </View>
+      </Card>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      <Card>
+        <SectionHeader title="Phase 1 features" subtitle="Everything active before AI coaching." />
+        <View style={styles.pillRow}>
+          <Pill label="Auth" tone="accent" />
+          <Pill label="Onboarding" tone="accent" />
+          <Pill label="Weight logging" tone="accent" />
+          <Pill label="Workout logging" tone="accent" />
+          <Pill label="PR tracking" tone="accent" />
+          <Pill label="Progression" tone="accent" />
+        </View>
+        <Text style={styles.phaseNote}>Phase 2 will add the AI coach.</Text>
+      </Card>
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={loading}
-        onPress={handleLogout}
-        style={({ pressed }) => [
-          styles.button,
-          (loading || pressed) && styles.buttonPressed,
-        ]}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Signing out...' : 'Log out'}
-        </Text>
-      </Pressable>
+      {error ? <ErrorState message={error} /> : null}
+
+      <Button
+        label={loading ? 'Signing out...' : 'Log out'}
+        loading={loading}
+        onPress={() => void handleLogout()}
+        variant="danger"
+      />
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 8,
-    padding: 16,
-  },
-  label: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
   value: {
-    color: '#f8fafc',
-    fontSize: 16,
+    color: colors.text,
+    fontSize: fontSizes.lg,
+    lineHeight: 24,
+    marginTop: spacing.sm,
   },
   editLink: {
-    color: '#38bdf8',
-    fontSize: 15,
-    fontWeight: '600',
-    marginTop: 6,
+    color: colors.accent,
+    fontSize: fontSizes.md,
+    fontWeight: '800',
+    marginTop: spacing.sm,
   },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
-    lineHeight: 20,
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-  button: {
-    alignItems: 'center',
-    backgroundColor: '#dc2626',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  buttonPressed: {
-    opacity: 0.8,
-  },
-  buttonText: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '700',
+  phaseNote: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
 });

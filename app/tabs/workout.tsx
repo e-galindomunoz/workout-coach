@@ -1,8 +1,18 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { FAB } from '../../components/ui/FAB';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Pill } from '../../components/ui/Pill';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { StatCard } from '../../components/ui/StatCard';
 import { deleteWorkoutSession, getLatestBodyMetric, getRecentWorkoutSessions } from '../../lib/supabase';
+import { colors, fontSizes, spacing } from '../../lib/theme';
 import { getLatestWorkout, getWorkoutsThisWeekCount } from '../../lib/workouts';
 import type { BodyMetric, WorkoutSession } from '../../types/supabase';
 
@@ -11,10 +21,16 @@ export default function WorkoutTabScreen() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [latestMetric, setLatestMetric] = useState<BodyMetric | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     setError(null);
 
     const [sessionsResult, metricResult] = await Promise.all([
@@ -37,6 +53,7 @@ export default function WorkoutTabScreen() {
     }
 
     setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -49,7 +66,7 @@ export default function WorkoutTabScreen() {
   function confirmDeleteWorkout(session: WorkoutSession) {
     Alert.alert(
       'Delete workout?',
-      `Delete "${session.title}" and all of its logged sets?`,
+      `Delete "${session.title}" and all its logged sets?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -72,85 +89,91 @@ export default function WorkoutTabScreen() {
       return;
     }
 
-    await loadData();
+    await loadData(true);
   }
 
   return (
     <AppScreen
       title="Workout"
-      description="Start a workout, review recent sessions, and track your weekly training pace."
+      description="Log a session, track your history, and keep your momentum going."
+      refreshing={refreshing}
+      onRefresh={() => void loadData(true)}
+      fab={
+        <FAB
+          actions={[
+            { label: 'Start Workout', onPress: () => router.push('/workout/new') },
+          ]}
+        />
+      }
     >
-      <View style={styles.content}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/workout/new')}
-          style={({ pressed }) => [styles.primaryButton, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.primaryButtonText}>Start Workout</Text>
-        </Pressable>
+      {loading ? (
+        <LoadingState message="Loading workouts..." />
+      ) : (
+        <View style={styles.content}>
+          {error ? <ErrorState message={error} /> : null}
 
-        <View style={styles.statGrid}>
-          <StatCard label="Workouts this week" value={`${workoutsThisWeek}`} />
+          <View style={styles.statRow}>
+            <StatCard
+              label="This week"
+              value={`${workoutsThisWeek}`}
+              caption="Sessions trained"
+              accent
+              style={styles.statFlex}
+            />
+            <StatCard
+              label="Last session"
+              value={lastWorkout ? formatDate(lastWorkout.started_at) : 'None yet'}
+              caption={lastWorkout?.title ?? 'Start your first session'}
+              style={styles.statFlex}
+            />
+          </View>
           <StatCard
-            label="Last workout"
-            value={lastWorkout ? formatDate(lastWorkout.started_at) : 'None yet'}
+            label="Body weight"
+            value={latestMetric ? `${latestMetric.weight} lb` : 'Not logged'}
+            caption={latestMetric ? formatDate(latestMetric.logged_at) : 'Log on Dashboard'}
           />
-          <StatCard
-            label="Latest body weight"
-            value={latestMetric ? `${latestMetric.weight} lb` : 'No entries'}
-          />
-        </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Recent workout sessions</Text>
+          <Card>
+            <SectionHeader
+              title="Session history"
+              subtitle="Tap a session to view its summary."
+            />
 
-          {loading ? (
-            <View style={styles.loadingState}>
-              <ActivityIndicator color="#38bdf8" />
-              <Text style={styles.loadingText}>Loading workouts...</Text>
-            </View>
-          ) : error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : sessions.length === 0 ? (
-            <Text style={styles.emptyText}>No workouts logged yet.</Text>
-          ) : (
-            sessions.map((session) => (
-              <Pressable
-                key={session.id}
-                onPress={() => router.push(`/workout/${session.id}`)}
-                style={({ pressed }) => [styles.sessionRow, pressed && styles.buttonPressed]}
-              >
-                <View style={styles.sessionMeta}>
-                  <Text style={styles.sessionTitle}>{session.title}</Text>
-                  <Text style={styles.sessionDetail}>
-                    {formatDate(session.started_at)}
-                    {session.duration_minutes ? ` · ${session.duration_minutes} min` : ''}
-                  </Text>
-                  {session.workout_type ? (
-                    <Text style={styles.sessionDetail}>{session.workout_type}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.sessionActions}>
-                  <Text style={styles.sessionLink}>View</Text>
-                  <Pressable onPress={() => confirmDeleteWorkout(session)}>
-                    <Text style={styles.deleteLink}>Delete</Text>
-                  </Pressable>
-                </View>
-              </Pressable>
-            ))
-          )}
+            {sessions.length === 0 ? (
+              <EmptyState
+                title="No sessions yet"
+                description="Start your first workout to build history, PRs, and progression recommendations."
+              />
+            ) : (
+              sessions.map((session) => (
+                <Pressable
+                  key={session.id}
+                  onPress={() => router.push(`/workout/${session.id}`)}
+                  style={({ pressed }) => [styles.sessionRow, pressed && styles.rowPressed]}
+                >
+                  <View style={styles.sessionMeta}>
+                    <View style={styles.sessionHeading}>
+                      <Text style={styles.sessionTitle}>{session.title}</Text>
+                      {session.workout_type ? <Pill label={session.workout_type} /> : null}
+                    </View>
+                    <Text style={styles.sessionDetail}>
+                      {formatDate(session.started_at)}
+                      {session.duration_minutes ? ` · ${session.duration_minutes} min` : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.sessionActions}>
+                    <Text style={styles.sessionLink}>View</Text>
+                    <Pressable onPress={() => confirmDeleteWorkout(session)}>
+                      <Text style={styles.deleteLink}>Delete</Text>
+                    </Pressable>
+                  </View>
+                </Pressable>
+              ))
+            )}
+          </Card>
         </View>
-      </View>
+      )}
     </AppScreen>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
   );
 }
 
@@ -163,118 +186,60 @@ function formatDate(value: string) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 16,
-    paddingBottom: 40,
+    gap: spacing.lg,
+    paddingBottom: 100,
   },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#38bdf8',
-    borderRadius: 16,
-    justifyContent: 'center',
-    minHeight: 56,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-  },
-  primaryButtonText: {
-    color: '#0f172a',
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  buttonPressed: {
-    opacity: 0.84,
-  },
-  statGrid: {
+  statRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.md,
   },
-  statCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexGrow: 1,
-    minWidth: '47%',
-    padding: 16,
-  },
-  statLabel: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    color: '#f8fafc',
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  card: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 18,
-  },
-  cardTitle: {
-    color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-  loadingState: {
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-  },
-  loadingText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-  },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  emptyText: {
-    color: '#94a3b8',
-    fontSize: 14,
+  statFlex: {
+    flex: 1,
   },
   sessionRow: {
     alignItems: 'center',
-    borderBottomColor: '#1f2937',
-    borderBottomWidth: 1,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
     flexDirection: 'row',
+    gap: spacing.md,
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingTop: spacing.md,
+  },
+  rowPressed: {
+    opacity: 0.82,
   },
   sessionMeta: {
     flex: 1,
-    gap: 4,
+    gap: 6,
+  },
+  sessionHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   sessionTitle: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '700',
+    color: colors.text,
+    flexShrink: 1,
+    fontSize: fontSizes.lg,
+    fontWeight: '800',
   },
   sessionDetail: {
-    color: '#cbd5e1',
-    fontSize: 14,
-  },
-  sessionLink: {
-    color: '#38bdf8',
-    fontSize: 14,
-    fontWeight: '700',
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
   },
   sessionActions: {
     alignItems: 'flex-end',
     gap: 8,
-    marginLeft: 12,
+  },
+  sessionLink: {
+    color: colors.accent,
+    fontSize: fontSizes.md,
+    fontWeight: '800',
   },
   deleteLink: {
-    color: '#fca5a5',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.danger,
+    fontSize: fontSizes.sm,
+    fontWeight: '800',
   },
 });

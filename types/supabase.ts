@@ -187,3 +187,11 @@ export type ProgressionRecommendation = {
   reason: string;
   confidence: 'low' | 'medium' | 'high';
 };
+
+export type PrHighlight = {
+  exerciseName: string;
+  type: 'heaviest' | 'estimated_1rm' | 'rep_pr' | 'session_volume';
+  label: string;
+  previousValue: string;
+  currentValue: string;
+};

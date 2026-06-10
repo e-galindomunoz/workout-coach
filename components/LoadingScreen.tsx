@@ -1,4 +1,5 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { AppScreen } from './AppScreen';
+import { LoadingState } from './ui/LoadingState';
 
 type LoadingScreenProps = {
   message: string;
@@ -6,25 +7,13 @@ type LoadingScreenProps = {
 
 export function LoadingScreen({ message }: LoadingScreenProps) {
   return (
-    <View style={styles.container}>
-      <ActivityIndicator color="#38bdf8" size="large" />
-      <Text style={styles.message}>{message}</Text>
-    </View>
+    <AppScreen
+      title="One second"
+      description="We’re syncing your session and preparing the app."
+      fillContent
+      scrollEnabled={false}
+    >
+      <LoadingState message={message} />
+    </AppScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-    flex: 1,
-    gap: 16,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  message: {
-    color: '#cbd5e1',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-});

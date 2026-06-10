@@ -2,6 +2,7 @@ import type {
   ExerciseLog,
   ExerciseSessionPerformance,
   PersonalBestSummary,
+  PrHighlight,
   ProgressionRecommendation,
 } from '../types/supabase';
 
@@ -422,33 +423,77 @@ export function getExercisePrHighlights(
 ) {
   const current = getExercisePersonalBest(currentLogs);
   const previous = getExercisePersonalBest(previousLogs);
-  const highlights: string[] = [];
+  const highlights: PrHighlight[] = [];
 
   if (
     (current.heaviestWeight.weight ?? 0) > (previous.heaviestWeight.weight ?? 0)
   ) {
-    highlights.push(`New heaviest weight on ${exerciseName}`);
+    highlights.push({
+      exerciseName,
+      type: 'heaviest',
+      label: 'New heaviest weight',
+      previousValue:
+        previous.heaviestWeight.weight && previous.heaviestWeight.reps
+          ? `${previous.heaviestWeight.weight} lb x ${previous.heaviestWeight.reps}`
+          : 'No prior record',
+      currentValue:
+        current.heaviestWeight.weight && current.heaviestWeight.reps
+          ? `${current.heaviestWeight.weight} lb x ${current.heaviestWeight.reps}`
+          : `${current.heaviestWeight.weight ?? 0} lb`,
+    });
   }
 
   if (
     (current.bestEstimatedOneRepMax.value ?? 0) >
     (previous.bestEstimatedOneRepMax.value ?? 0)
   ) {
-    highlights.push(`New estimated 1RM on ${exerciseName}`);
+    highlights.push({
+      exerciseName,
+      type: 'estimated_1rm',
+      label: 'New estimated 1RM',
+      previousValue: previous.bestEstimatedOneRepMax.value
+        ? `${Math.round(previous.bestEstimatedOneRepMax.value)} lb`
+        : 'No prior record',
+      currentValue: current.bestEstimatedOneRepMax.value
+        ? `${Math.round(current.bestEstimatedOneRepMax.value)} lb`
+        : 'N/A',
+    });
   }
 
   if (
     (current.bestRepAtWeight.reps ?? 0) > (previous.bestRepAtWeight.reps ?? 0) &&
     current.bestRepAtWeight.weight === previous.bestRepAtWeight.weight
   ) {
-    highlights.push(`New rep PR on ${exerciseName}`);
+    highlights.push({
+      exerciseName,
+      type: 'rep_pr',
+      label: 'New rep PR',
+      previousValue:
+        previous.bestRepAtWeight.weight && previous.bestRepAtWeight.reps
+          ? `${previous.bestRepAtWeight.weight} lb x ${previous.bestRepAtWeight.reps}`
+          : 'No prior record',
+      currentValue:
+        current.bestRepAtWeight.weight && current.bestRepAtWeight.reps
+          ? `${current.bestRepAtWeight.weight} lb x ${current.bestRepAtWeight.reps}`
+          : 'N/A',
+    });
   }
 
   if (
     (current.highestSessionVolume.volume ?? 0) >
     (previous.highestSessionVolume.volume ?? 0)
   ) {
-    highlights.push(`New session volume PR on ${exerciseName}`);
+    highlights.push({
+      exerciseName,
+      type: 'session_volume',
+      label: 'New session volume PR',
+      previousValue: previous.highestSessionVolume.volume
+        ? `${Math.round(previous.highestSessionVolume.volume)} lb`
+        : 'No prior record',
+      currentValue: current.highestSessionVolume.volume
+        ? `${Math.round(current.highestSessionVolume.volume)} lb`
+        : 'N/A',
+    });
   }
 
   return highlights;

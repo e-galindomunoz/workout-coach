@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from '../components/AuthProvider';
+import { colors } from '../lib/theme';
 
 export default function RootLayout() {
   return (
@@ -9,11 +10,12 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#0f172a',
+            backgroundColor: colors.background,
           },
-          headerTintColor: '#f8fafc',
+          headerTintColor: colors.text,
+          headerShadowVisible: false,
           contentStyle: {
-            backgroundColor: '#0f172a',
+            backgroundColor: colors.background,
           },
         }}
       >

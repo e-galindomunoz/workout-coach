@@ -1,15 +1,14 @@
 import { Link } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from './AppScreen';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { ErrorState } from './ui/ErrorState';
+import { Input } from './ui/Input';
+import { Pill } from './ui/Pill';
 import { createProfile, isSupabaseConfigured, supabase, supabaseConfigError } from '../lib/supabase';
+import { colors, fontSizes, spacing } from '../lib/theme';
 
 type AuthFormProps = {
   mode: 'login' | 'signup';
@@ -115,149 +114,120 @@ export function AuthForm({
 
   return (
     <AppScreen title={title} description={description}>
-      <View style={styles.formCard}>
-        {mode === 'signup' ? (
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+      >
+        <Card accent style={styles.heroCard}>
+          <Pill label={mode === 'login' ? 'Welcome back' : 'New account'} tone="accent" />
+          <Text style={styles.heroTitle}>
+            {mode === 'login'
+              ? 'Open your training history and pick up where you left off.'
+              : 'Create the account that will hold your workouts, PRs, and progression.'}
+          </Text>
+          <Text style={styles.heroText}>
+            Phase 1 is fully manual and deterministic. Your data stays clean and drives every stat in the app.
+          </Text>
+        </Card>
+
+        <Card style={styles.formCard}>
+          {mode === 'signup' ? (
+            <Input
               autoCapitalize="words"
+              label="Name"
               onChangeText={setName}
               placeholder="Your name"
-              placeholderTextColor="#64748b"
-              style={styles.input}
               value={name}
             />
-          </View>
-        ) : null}
+          ) : null}
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
+          <Input
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
+            label="Email"
             onChangeText={setEmail}
             placeholder="you@example.com"
-            placeholderTextColor="#64748b"
-            style={styles.input}
             value={email}
           />
-        </View>
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
+          <Input
             autoCapitalize="none"
+            label="Password"
             onChangeText={setPassword}
             placeholder="Password"
-            placeholderTextColor="#64748b"
             secureTextEntry
-            style={styles.input}
             value={password}
           />
-        </View>
 
-        {mode === 'signup' ? (
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Confirm password</Text>
-            <TextInput
+          {mode === 'signup' ? (
+            <Input
               autoCapitalize="none"
+              label="Confirm password"
               onChangeText={setConfirmPassword}
               placeholder="Confirm password"
-              placeholderTextColor="#64748b"
               secureTextEntry
-              style={styles.input}
               value={confirmPassword}
             />
-          </View>
-        ) : null}
+          ) : null}
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {message ? <Text style={styles.messageText}>{message}</Text> : null}
+          {error ? <ErrorState message={error} /> : null}
+          {message ? (
+            <View style={styles.messageCard}>
+              <Pill label="Success" tone="success" />
+              <Text style={styles.messageText}>{message}</Text>
+            </View>
+          ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          disabled={loading}
-          onPress={handleSubmit}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            (loading || pressed) && styles.primaryButtonPressed,
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator color="#0f172a" />
-          ) : (
-            <Text style={styles.primaryButtonText}>
-              {mode === 'login' ? 'Log in' : 'Create account'}
-            </Text>
-          )}
-        </Pressable>
-      </View>
+          <Button
+            label={mode === 'login' ? 'Log in' : 'Create account'}
+            loading={loading}
+            onPress={() => void handleSubmit()}
+          />
+        </Card>
 
-      <Link href={alternateHref} style={styles.secondaryLink}>
-        {alternateLabel}
-      </Link>
+        <Link href={alternateHref} style={styles.secondaryLink}>
+          {alternateLabel}
+        </Link>
+      </KeyboardAvoidingView>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    gap: spacing.lg,
+  },
+  heroCard: {
+    gap: spacing.md,
+  },
+  heroTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+    lineHeight: 30,
+  },
+  heroText: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+  },
   formCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 16,
-    padding: 18,
+    gap: spacing.lg,
   },
-  fieldGroup: {
-    gap: 8,
-  },
-  label: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: '#020617',
-    borderColor: '#334155',
-    borderRadius: 12,
-    borderWidth: 1,
-    color: '#f8fafc',
-    fontSize: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
-    lineHeight: 20,
+  messageCard: {
+    gap: spacing.sm,
   },
   messageText: {
-    color: '#86efac',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#38bdf8',
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 52,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonPressed: {
-    opacity: 0.85,
-  },
-  primaryButtonText: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '700',
+    color: colors.success,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
   },
   secondaryLink: {
-    color: '#38bdf8',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.accent,
+    fontSize: fontSizes.md,
+    fontWeight: '700',
+    paddingBottom: spacing.sm,
+    textAlign: 'center',
   },
 });

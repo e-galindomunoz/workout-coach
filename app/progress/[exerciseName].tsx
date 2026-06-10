@@ -1,14 +1,19 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
-import {
-  getBestSetForExercise,
-  getExercisePersonalBest,
-  getGroupedExerciseSessions,
-  getProgressionRecommendation,
-} from '../../lib/progression';
+import { Card } from '../../components/ui/Card';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { Pill } from '../../components/ui/Pill';
+import { ProgressBar } from '../../components/ui/ProgressBar';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { StatCard } from '../../components/ui/StatCard';
+import { getBestSetForExercise, getExercisePersonalBest, getGroupedExerciseSessions, getProgressionRecommendation } from '../../lib/progression';
 import { getExerciseHistory } from '../../lib/supabase';
+import { colors, fontSizes, radius, spacing } from '../../lib/theme';
 import type { ExerciseLog } from '../../types/supabase';
 
 export default function ExerciseDetailScreen() {
@@ -63,56 +68,58 @@ export default function ExerciseDetailScreen() {
       <Stack.Screen options={{ title: exerciseName || 'Exercise Detail' }} />
       <AppScreen
         title={exerciseName || 'Exercise Detail'}
-        description="Review your personal bests, last five sessions, and the next deterministic training target."
+        description="Personal bests, recent sessions, and your next target."
       >
         {loading ? (
-          <View style={styles.stateBlock}>
-            <ActivityIndicator color="#38bdf8" />
-            <Text style={styles.stateText}>Loading exercise history...</Text>
-          </View>
+          <LoadingState message="Loading exercise history..." />
         ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
+          <ErrorState message={error} />
         ) : logs.length === 0 ? (
-          <Text style={styles.emptyText}>No history found for this exercise yet.</Text>
+          <EmptyState
+            title="No history found"
+            description="Log this exercise in a workout first to see bests and recommendations."
+          />
         ) : (
           <View style={styles.content}>
-            <View style={styles.heroCard}>
-              <Text style={styles.cardLabel}>Next recommendation</Text>
-              <Text style={styles.heroTitle}>
-                {formatRecommendationTarget(recommendation)}
-              </Text>
+            {/* Next target hero */}
+            <GlassCard style={styles.heroCard}>
+              <SectionHeader
+                title={exerciseName}
+                subtitle={personalBest.muscleGroup ?? 'Muscle group not set'}
+              />
+              <Text style={styles.heroValue}>{formatRecommendationTarget(recommendation)}</Text>
               <Text style={styles.heroReason}>{recommendation.reason}</Text>
-              <Text style={styles.heroMeta}>
-                Last time: {recommendation.lastPerformance}
-              </Text>
-              <Text style={styles.heroMeta}>
-                Confidence: {recommendation.confidence}
-              </Text>
-            </View>
+              <View style={styles.heroMetaRow}>
+                <Pill label={formatRecommendationType(recommendation.recommendationType)} tone="accent" />
+                <Pill label={`${recommendation.confidence} confidence`} />
+              </View>
+            </GlassCard>
 
+            {/* PR stats grid */}
             <View style={styles.statGrid}>
-              <StatCard
-                label="Heaviest"
-                value={formatHeaviest(personalBest)}
-              />
-              <StatCard
-                label="Best est. 1RM"
-                value={personalBest.bestEstimatedOneRepMax.value
-                  ? `${Math.round(personalBest.bestEstimatedOneRepMax.value)} lb`
-                  : 'N/A'}
-              />
-              <StatCard
-                label="Best set"
-                value={bestSet ? `${bestSet.weight ?? '-'} lb x ${bestSet.reps ?? '-'}` : 'N/A'}
-              />
-              <StatCard
-                label="Trend"
-                value={formatTrend(personalBest.recentTrend)}
-              />
+              <StatCard label="Heaviest" value={formatHeaviest(personalBest)} />
+              <StatCard label="Best est. 1RM" value={formatEstimatedOneRepMax(personalBest)} accent />
+              <StatCard label="Best reps" value={formatRepAtWeight(personalBest)} />
+              <StatCard label="Best volume" value={formatVolume(personalBest.highestSessionVolume.volume)} />
             </View>
 
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Last 5 sessions</Text>
+            {/* Best set detail */}
+            <Card>
+              <SectionHeader title="Working data" subtitle="Your best set and most recent performance." />
+              <Text style={styles.detailLine}>
+                Best set: {bestSet ? `${bestSet.weight ?? 'BW'} lb × ${bestSet.reps ?? '-'}` : 'N/A'}
+              </Text>
+              <Text style={styles.detailLine}>
+                Last performed: {formatDate(personalBest.lastPerformedDate)}
+              </Text>
+              <Text style={styles.detailLine}>
+                Recent sets: {personalBest.mostRecentSets.map((set) => `${set.weight ?? 'BW'} × ${set.reps ?? '-'}`).join(', ')}
+              </Text>
+            </Card>
+
+            {/* Recent sessions */}
+            <Card>
+              <SectionHeader title="Recent sessions" subtitle="Tap any session to open its full summary." />
               {sessions.map((session) => {
                 const widthPercent =
                   maxVolume > 0 ? Math.max(10, Math.round((session.totalVolume / maxVolume) * 100)) : 10;
@@ -121,51 +128,25 @@ export default function ExerciseDetailScreen() {
                   <Pressable
                     key={session.sessionId}
                     onPress={() => router.push(`/workout/${session.sessionId}`)}
-                    style={({ pressed }) => [styles.sessionCard, pressed && styles.buttonPressed]}
+                    style={({ pressed }) => [styles.sessionCard, pressed && styles.rowPressed]}
                   >
                     <View style={styles.sessionHeader}>
                       <Text style={styles.sessionDate}>{formatDate(session.loggedAt)}</Text>
-                      <Text style={styles.sessionVolume}>
-                        {Math.round(session.totalVolume)} lb volume
-                      </Text>
+                      <Text style={styles.sessionVolume}>{Math.round(session.totalVolume)} lb vol</Text>
                     </View>
-                    <View style={styles.volumeTrack}>
-                      <View style={[styles.volumeBar, { width: `${widthPercent}%` }]} />
-                    </View>
+                    <ProgressBar value={widthPercent} />
                     <Text style={styles.sessionSets}>
                       {session.sets
-                        .map((set) => `${set.weight ?? 'BW'} x ${set.reps ?? '-'}`)
+                        .map((set) => `${set.weight ?? 'BW'} × ${set.reps ?? '-'}`)
                         .join(', ')}
                     </Text>
                     <Text style={styles.sessionSubtext}>
-                      Top set {session.topWeight ?? 'N/A'} lb · Est. 1RM{' '}
-                      {session.bestEstimatedOneRepMax
-                        ? Math.round(session.bestEstimatedOneRepMax)
-                        : 'N/A'}
+                      Top {session.topWeight ?? 'N/A'} lb · Est. 1RM {session.bestEstimatedOneRepMax ? Math.round(session.bestEstimatedOneRepMax) : 'N/A'}
                     </Text>
                   </Pressable>
                 );
               })}
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Personal best details</Text>
-              <Text style={styles.detailLine}>
-                Most reps at a given weight: {formatRepAtWeight(personalBest)}
-              </Text>
-              <Text style={styles.detailLine}>
-                Highest session volume: {formatVolume(personalBest.highestSessionVolume.volume)}
-              </Text>
-              <Text style={styles.detailLine}>
-                Most recent working weight:{' '}
-                {personalBest.mostRecentWorkingWeight
-                  ? `${personalBest.mostRecentWorkingWeight} lb`
-                  : 'N/A'}
-              </Text>
-              <Text style={styles.detailLine}>
-                Last performed: {formatDate(personalBest.lastPerformedDate)}
-              </Text>
-            </View>
+            </Card>
           </View>
         )}
       </AppScreen>
@@ -173,23 +154,29 @@ export default function ExerciseDetailScreen() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.statCard}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
-function formatRecommendationTarget(
-  recommendation: ReturnType<typeof getProgressionRecommendation>,
-) {
+function formatRecommendationTarget(recommendation: ReturnType<typeof getProgressionRecommendation>) {
   if (recommendation.recommendedNextWeight === null) {
     return `Aim for ${recommendation.recommendedRepTarget}`;
   }
 
-  return `Try ${recommendation.recommendedNextWeight} lb for ${recommendation.recommendedRepTarget}`;
+  return `Try ${recommendation.recommendedNextWeight} lb × ${recommendation.recommendedRepTarget}`;
+}
+
+function formatRecommendationType(type: ReturnType<typeof getProgressionRecommendation>['recommendationType']) {
+  switch (type) {
+    case 'increase_weight':
+      return 'Increase weight';
+    case 'repeat_weight':
+      return 'Repeat weight';
+    case 'reduce_weight':
+      return 'Reduce weight';
+    case 'increase_reps':
+      return 'Add reps';
+    case 'deload_or_caution':
+      return 'Caution';
+    default:
+      return 'Baseline';
+  }
 }
 
 function formatHeaviest(logs: ReturnType<typeof getExercisePersonalBest>) {
@@ -197,11 +184,11 @@ function formatHeaviest(logs: ReturnType<typeof getExercisePersonalBest>) {
     return 'N/A';
   }
 
-  if (logs.heaviestWeight.reps) {
-    return `${logs.heaviestWeight.weight} lb x ${logs.heaviestWeight.reps}`;
-  }
+  return `${logs.heaviestWeight.weight} lb${logs.heaviestWeight.reps ? ` × ${logs.heaviestWeight.reps}` : ''}`;
+}
 
-  return `${logs.heaviestWeight.weight} lb`;
+function formatEstimatedOneRepMax(personalBest: ReturnType<typeof getExercisePersonalBest>) {
+  return personalBest.bestEstimatedOneRepMax.value ? `${Math.round(personalBest.bestEstimatedOneRepMax.value)} lb` : 'N/A';
 }
 
 function formatRepAtWeight(personalBest: ReturnType<typeof getExercisePersonalBest>) {
@@ -209,31 +196,11 @@ function formatRepAtWeight(personalBest: ReturnType<typeof getExercisePersonalBe
     return 'N/A';
   }
 
-  return `${personalBest.bestRepAtWeight.weight} lb x ${personalBest.bestRepAtWeight.reps}`;
+  return `${personalBest.bestRepAtWeight.weight} × ${personalBest.bestRepAtWeight.reps}`;
 }
 
 function formatVolume(volume: number | null) {
-  if (!volume) {
-    return 'N/A';
-  }
-
-  return `${Math.round(volume)} lb`;
-}
-
-function formatTrend(trend: ReturnType<typeof getExercisePersonalBest>['recentTrend']) {
-  if (trend === 'insufficient_data') {
-    return 'Not enough data';
-  }
-
-  if (trend === 'up') {
-    return 'Trending up';
-  }
-
-  if (trend === 'down') {
-    return 'Trending down';
-  }
-
-  return 'Flat';
+  return volume ? `${Math.round(volume)} lb` : 'N/A';
 }
 
 function formatDate(value: string | null) {
@@ -250,107 +217,50 @@ function formatDate(value: string | null) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 16,
-    paddingBottom: 40,
-  },
-  stateBlock: {
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 20,
-  },
-  stateText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-  },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  emptyText: {
-    color: '#94a3b8',
-    fontSize: 14,
-    lineHeight: 20,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   heroCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 8,
-    padding: 18,
+    gap: spacing.md,
   },
-  cardLabel: {
-    color: '#38bdf8',
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  heroTitle: {
-    color: '#f8fafc',
-    fontSize: 24,
+  heroValue: {
+    color: colors.text,
+    fontSize: 30,
     fontWeight: '800',
-    lineHeight: 32,
+    lineHeight: 36,
   },
   heroReason: {
-    color: '#cbd5e1',
-    fontSize: 15,
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
     lineHeight: 22,
   },
-  heroMeta: {
-    color: '#94a3b8',
-    fontSize: 14,
+  heroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   statGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.md,
   },
-  statCard: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexGrow: 1,
-    minWidth: '47%',
-    padding: 16,
-  },
-  statLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  card: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 18,
-  },
-  cardTitle: {
-    color: '#f8fafc',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
+  detailLine: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+    marginBottom: spacing.sm,
   },
   sessionCard: {
-    backgroundColor: '#0b1220',
-    borderColor: '#1f2937',
-    borderRadius: 16,
+    backgroundColor: colors.surfaceCard,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     borderWidth: 1,
-    gap: 8,
-    marginBottom: 12,
-    padding: 14,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.lg,
   },
-  buttonPressed: {
-    opacity: 0.84,
+  rowPressed: {
+    opacity: 0.82,
   },
   sessionHeader: {
     alignItems: 'center',
@@ -358,40 +268,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sessionDate: {
-    color: '#f8fafc',
-    fontSize: 15,
-    fontWeight: '700',
+    color: colors.text,
+    fontSize: fontSizes.md,
+    fontWeight: '800',
   },
   sessionVolume: {
-    color: '#cbd5e1',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  volumeTrack: {
-    backgroundColor: '#1f2937',
-    borderRadius: 999,
-    height: 10,
-    overflow: 'hidden',
-  },
-  volumeBar: {
-    backgroundColor: '#38bdf8',
-    borderRadius: 999,
-    height: '100%',
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
+    fontWeight: '700',
   },
   sessionSets: {
-    color: '#e2e8f0',
-    fontSize: 14,
+    color: colors.text,
+    fontSize: fontSizes.md,
     lineHeight: 20,
   },
   sessionSubtext: {
-    color: '#94a3b8',
-    fontSize: 13,
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
     lineHeight: 18,
-  },
-  detailLine: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 8,
   },
 });
