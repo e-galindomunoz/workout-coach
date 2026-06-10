@@ -1,4 +1,5 @@
-import { supabase, isSupabaseConfigured, supabaseConfigError } from './supabase';
+import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabase';
+import type { CoachContext } from './coachContext';
 import type {
   AdjustWorkoutRequest,
   AdjustWorkoutResponse,
@@ -14,12 +15,12 @@ function notConfigured<T>(): ApiResult<T> {
 
 export async function sendCoachMessage(
   message: string,
-  context?: Record<string, unknown>,
+  context: CoachContext,
 ): Promise<ApiResult<CoachChatResponse>> {
   if (!isSupabaseConfigured) return notConfigured();
 
   const { data, error } = await supabase.functions.invoke<CoachChatResponse>('coach-chat', {
-    body: { message, context: context ?? {} },
+    body: { message, context },
   });
 
   return {
@@ -36,9 +37,7 @@ export async function getWorkoutInsight(
 
   const { data, error } = await supabase.functions.invoke<WorkoutInsightResponse>(
     'workout-insight',
-    {
-      body: { exerciseName, context: context ?? {} },
-    },
+    { body: { exerciseName, context: context ?? {} } },
   );
 
   return {
@@ -56,9 +55,7 @@ export async function requestWorkoutAdjustment(
 
   const { data, error } = await supabase.functions.invoke<AdjustWorkoutResponse>(
     'adjust-workout',
-    {
-      body: { request, currentWorkout, context: context ?? {} },
-    },
+    { body: { request, currentWorkout, context: context ?? {} } },
   );
 
   return {

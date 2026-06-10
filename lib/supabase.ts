@@ -45,7 +45,7 @@ if (Platform.OS !== 'web') {
   });
 }
 
-function missingConfigResult() {
+function missingConfigResult<T = unknown>(): { data: null; error: Error } {
   return {
     data: null,
     error: new Error(supabaseConfigError),
@@ -531,6 +531,78 @@ export async function upsertExerciseToCatalog(input: {
     .single<ExerciseCatalogItem>();
 
   return result;
+}
+
+// ─── Coach messages ───────────────────────────────────────────────────────────
+
+export type CoachMessageRow = {
+  id: string;
+  user_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export async function getCoachMessages(limit = 60) {
+  if (!isSupabaseConfigured) return missingConfigResult<CoachMessageRow[]>();
+
+  const userResult = await getCurrentUser();
+  if (userResult.error || !userResult.data) {
+    return { data: null, error: userResult.error ?? new Error('No authenticated user found.') };
+  }
+
+  const result = await supabase
+    .from('coach_messages')
+    .select('*')
+    .eq('user_id', userResult.data.id)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+    .returns<CoachMessageRow[]>();
+
+  return result;
+}
+
+export async function saveCoachMessage(input: {
+  role: 'user' | 'assistant';
+  content: string;
+  metadata?: Record<string, unknown> | null;
+}) {
+  if (!isSupabaseConfigured) return missingConfigResult<CoachMessageRow>();
+
+  const userResult = await getCurrentUser();
+  if (userResult.error || !userResult.data) {
+    return { data: null, error: userResult.error ?? new Error('No authenticated user found.') };
+  }
+
+  const result = await supabase
+    .from('coach_messages')
+    .insert({
+      user_id: userResult.data.id,
+      role: input.role,
+      content: input.content,
+      metadata: input.metadata ?? null,
+    })
+    .select()
+    .single<CoachMessageRow>();
+
+  return result;
+}
+
+export async function clearCoachMessages() {
+  if (!isSupabaseConfigured) return { error: new Error(supabaseConfigError) };
+
+  const userResult = await getCurrentUser();
+  if (userResult.error || !userResult.data) {
+    return { error: userResult.error ?? new Error('No authenticated user found.') };
+  }
+
+  const { error } = await supabase
+    .from('coach_messages')
+    .delete()
+    .eq('user_id', userResult.data.id);
+
+  return { error };
 }
 
 export { isProfileComplete };

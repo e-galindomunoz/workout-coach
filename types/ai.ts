@@ -1,17 +1,18 @@
-// ─── coach-chat ─────────────────────────────────────────────────────────────
+// ─── coach-chat ───────────────────────────────────────────────────────────────
 
 export type CoachChatRequest = {
   message: string;
-  context?: Record<string, unknown>;
+  context: import('../lib/coachContext').CoachContext;
 };
 
 export type CoachChatResponse = {
   reply: string;
   safetyLevel: 'normal' | 'caution' | 'stop';
   suggestedActions: string[];
+  referencedData: string[];
 };
 
-// ─── workout-insight ─────────────────────────────────────────────────────────
+// ─── workout-insight ──────────────────────────────────────────────────────────
 
 export type WorkoutInsightRequest = {
   exerciseName?: string;
@@ -44,4 +45,16 @@ export type AdjustWorkoutResponse = {
   coachNote: string;
   changes: AdjustWorkoutChange[];
   safetyNote: string | null;
+};
+
+// ─── UI message model ─────────────────────────────────────────────────────────
+
+export type CoachMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  safetyLevel?: 'normal' | 'caution' | 'stop';
+  suggestedActions?: string[];
+  referencedData?: string[];
+  createdAt: string;
 };
