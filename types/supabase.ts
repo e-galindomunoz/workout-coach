@@ -44,3 +44,18 @@ export type ProfileFormValues = {
   cardioPreference: string;
   notes: string;
 };
+
+export type BodyMetric = {
+  id: string;
+  user_id: string;
+  weight: number;
+  waist: number | null;
+  notes: string | null;
+  logged_at: string;
+};
+
+export type BodyMetricInsert = {
+  weight: number;
+  waist?: number | null;
+  notes?: string | null;
+};

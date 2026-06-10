@@ -102,8 +102,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-        if (active) {
+      if (active) {
         try {
+          setInitialized(false);
           setSession(nextSession);
           await syncProfileForSession(nextSession);
         } catch {

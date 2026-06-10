@@ -1,6 +1,6 @@
-# Workout Coach Stage 2
+# Workout Coach Stage 3
 
-This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, and a multi-step onboarding profile flow.
+This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, a multi-step onboarding profile flow, and simple body-weight logging.
 
 Current scope includes:
 
@@ -12,6 +12,8 @@ Current scope includes:
 - Auth-aware routing
 - Multi-step onboarding profile form
 - Editable profile flow from Settings
+- Body weight logging on the Dashboard
+- Latest weight and recent entries list
 - Logout from Settings
 - Placeholder screens and tab navigation
 
@@ -60,12 +62,21 @@ That migration:
 - adds per-user select/insert/update/delete policies
 - adds an `updated_at` trigger
 
+Also run the SQL from [supabase/migrations/20260610_create_body_metrics.sql](/Users/20edd49/projects/gym/supabase/migrations/20260610_create_body_metrics.sql).
+
+That migration:
+
+- creates the `body_metrics` table
+- enables Row Level Security
+- adds per-user select/insert/update/delete policies
+
 ## Onboarding routing
 
 - Signed out users are redirected to Login.
 - Signed in users without a completed `profiles` row are redirected to Onboarding.
 - Signed in users with a completed profile are redirected to the main tabs.
 - Settings includes an `Edit fitness profile` link that reuses the same profile form.
+- The Dashboard shows the latest body weight, a `Log Weight` form, and recent weight entries.
 
 ## Run on iPhone with Expo Go
 
@@ -79,8 +90,10 @@ That migration:
 8. Complete the onboarding steps and save the profile.
 9. Confirm successful completion redirects to the main tabs.
 10. Open Settings and use `Edit fitness profile` to update profile values.
-11. Open Settings and use Log out.
-12. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
+11. On Dashboard, add a weight entry and confirm it appears in `Latest body weight` and `Recent entries`.
+12. Delete a recent entry and confirm it disappears from the list.
+13. Open Settings and use Log out.
+14. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
 
 ## Later: EAS development builds
 
