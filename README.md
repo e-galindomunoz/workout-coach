@@ -1,6 +1,6 @@
-# Workout Coach Stage 3
+# Workout Coach Stage 4
 
-This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, a multi-step onboarding profile flow, and simple body-weight logging.
+This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, onboarding, body-weight logging, and manual workout tracking.
 
 Current scope includes:
 
@@ -14,8 +14,10 @@ Current scope includes:
 - Editable profile flow from Settings
 - Body weight logging on the Dashboard
 - Latest weight and recent entries list
+- Manual workout logging
+- Workout sessions, exercise logs, and exercise catalog
+- Workout summary and recent workout history
 - Logout from Settings
-- Placeholder screens and tab navigation
 
 It does not include OpenAI or workout business logic yet.
 
@@ -43,13 +45,13 @@ Run these commands from the project root:
 
 ```bash
 npm install
-npx expo start
+npx expo start -c
 ```
 
 ## What each command does
 
 - `npm install` installs project dependencies
-- `npx expo start` starts the Expo development server for Expo Go
+- `npx expo start -c` starts the Expo development server for Expo Go and clears Metro cache
 
 ## Supabase database setup
 
@@ -70,18 +72,29 @@ That migration:
 - enables Row Level Security
 - adds per-user select/insert/update/delete policies
 
+Also run the SQL from [supabase/migrations/20260610_create_workout_logging.sql](/Users/20edd49/projects/gym/supabase/migrations/20260610_create_workout_logging.sql).
+
+That migration:
+
+- creates `workout_sessions`
+- creates `exercise_logs`
+- creates `exercise_catalog`
+- enables Row Level Security on all three tables
+- adds per-user select/insert/update/delete policies
+
 ## Onboarding routing
 
 - Signed out users are redirected to Login.
 - Signed in users without a completed `profiles` row are redirected to Onboarding.
 - Signed in users with a completed profile are redirected to the main tabs.
 - Settings includes an `Edit fitness profile` link that reuses the same profile form.
-- The Dashboard shows the latest body weight, a `Log Weight` form, and recent weight entries.
+- The Dashboard shows the latest workout summary, workouts this week, latest body weight, and a `Start Workout` button.
+- The Workout tab shows `Start Workout`, quick stats, and recent workout sessions.
 
 ## Run on iPhone with Expo Go
 
 1. Install Expo Go from the App Store on your iPhone.
-2. Run `npx expo start` in this project.
+2. Run `npx expo start -c` in this project.
 3. Make sure your iPhone and Mac are on the same Wi-Fi network.
 4. Scan the QR code with your iPhone Camera app or from inside Expo Go.
 5. Confirm the app opens to the Login screen when signed out.
@@ -91,9 +104,13 @@ That migration:
 9. Confirm successful completion redirects to the main tabs.
 10. Open Settings and use `Edit fitness profile` to update profile values.
 11. On Dashboard, add a weight entry and confirm it appears in `Latest body weight` and `Recent entries`.
-12. Delete a recent entry and confirm it disappears from the list.
-13. Open Settings and use Log out.
-14. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
+12. Open Workout and tap `Start Workout`.
+13. Enter a workout title, add one or more exercises, and add sets with weight/reps/RPE.
+14. Finish the workout and confirm you land on the workout summary screen.
+15. Go back to Workout and confirm the session appears in recent workout history.
+16. Confirm the Dashboard shows the latest workout summary and updated workouts-this-week count.
+17. Open Settings and use Log out.
+18. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
 
 ## Later: EAS development builds
 

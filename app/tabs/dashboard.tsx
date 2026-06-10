@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Link, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -16,15 +17,19 @@ import {
   deleteBodyMetric,
   getBodyMetrics,
   getLatestBodyMetric,
+  getRecentWorkoutSessions,
 } from '../../lib/supabase';
-import type { BodyMetric } from '../../types/supabase';
+import { getLatestWorkout, getWorkoutsThisWeekCount } from '../../lib/workouts';
+import type { BodyMetric, WorkoutSession } from '../../types/supabase';
 
 export default function DashboardScreen() {
+  const router = useRouter();
   const [weight, setWeight] = useState('');
   const [waist, setWaist] = useState('');
   const [notes, setNotes] = useState('');
   const [latestMetric, setLatestMetric] = useState<BodyMetric | null>(null);
   const [metrics, setMetrics] = useState<BodyMetric[]>([]);
+  const [recentSessions, setRecentSessions] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,9 +38,10 @@ export default function DashboardScreen() {
     setLoading(true);
     setError(null);
 
-    const [latestResult, metricsResult] = await Promise.all([
+    const [latestResult, metricsResult, sessionsResult] = await Promise.all([
       getLatestBodyMetric(),
       getBodyMetrics(),
+      getRecentWorkoutSessions(6),
     ]);
 
     if (latestResult.error) {
@@ -51,12 +57,25 @@ export default function DashboardScreen() {
       setMetrics(metricsResult.data ?? []);
     }
 
+    if (sessionsResult.error) {
+      setError(sessionsResult.error.message);
+      setRecentSessions([]);
+    } else {
+      setRecentSessions(sessionsResult.data ?? []);
+    }
+
     setLoading(false);
   }, []);
 
   useEffect(() => {
     void loadMetrics();
   }, [loadMetrics]);
+
+  const latestWorkout = useMemo(() => getLatestWorkout(recentSessions), [recentSessions]);
+  const workoutsThisWeek = useMemo(
+    () => getWorkoutsThisWeekCount(recentSessions),
+    [recentSessions],
+  );
 
   async function handleSave() {
     setError(null);
@@ -117,6 +136,30 @@ export default function DashboardScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.formContainer}
       >
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/workout/new')}
+          style={({ pressed }) => [
+            styles.startWorkoutButton,
+            pressed && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.startWorkoutButtonText}>Start Workout</Text>
+        </Pressable>
+
+        <View style={styles.workoutSummaryCard}>
+          <Text style={styles.cardLabel}>Latest workout</Text>
+          <Text style={styles.summaryTitle}>
+            {latestWorkout ? latestWorkout.title : 'No workouts yet'}
+          </Text>
+          <Text style={styles.cardHint}>
+            {latestWorkout
+              ? `${formatDate(latestWorkout.started_at)}${latestWorkout.duration_minutes ? ` · ${latestWorkout.duration_minutes} min` : ''}`
+              : 'Start your first workout from the button above.'}
+          </Text>
+          <Text style={styles.summaryMeta}>Workouts this week: {workoutsThisWeek}</Text>
+        </View>
+
         <View style={styles.summaryCard}>
           <Text style={styles.cardLabel}>Latest body weight</Text>
           <Text style={styles.weightValue}>
@@ -272,6 +315,14 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 18,
   },
+  workoutSummaryCard: {
+    backgroundColor: '#111827',
+    borderColor: '#1f2937',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 8,
+    padding: 18,
+  },
   cardLabel: {
     color: '#94a3b8',
     fontSize: 13,
@@ -287,6 +338,30 @@ const styles = StyleSheet.create({
   cardHint: {
     color: '#cbd5e1',
     fontSize: 15,
+  },
+  summaryTitle: {
+    color: '#f8fafc',
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  summaryMeta: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  startWorkoutButton: {
+    alignItems: 'center',
+    backgroundColor: '#38bdf8',
+    borderRadius: 16,
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  startWorkoutButtonText: {
+    color: '#0f172a',
+    fontSize: 17,
+    fontWeight: '700',
   },
   formCard: {
     backgroundColor: '#111827',

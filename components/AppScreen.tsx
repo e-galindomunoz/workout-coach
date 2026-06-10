@@ -1,5 +1,11 @@
 import { PropsWithChildren } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 type AppScreenProps = PropsWithChildren<{
   title: string;
@@ -29,7 +35,11 @@ export function AppScreen({
   return (
     <SafeAreaView style={styles.safeArea}>
       {scrollEnabled ? (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+        >
           {content}
         </ScrollView>
       ) : (

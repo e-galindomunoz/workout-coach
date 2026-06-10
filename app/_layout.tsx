@@ -22,6 +22,8 @@ export default function RootLayout() {
         <Stack.Screen name="auth/signup" options={{ title: 'Signup' }} />
         <Stack.Screen name="onboarding/index" options={{ title: 'Onboarding' }} />
         <Stack.Screen name="settings/profile" options={{ title: 'Edit Profile' }} />
+        <Stack.Screen name="workout/new" options={{ title: 'Start Workout' }} />
+        <Stack.Screen name="workout/[id]" options={{ title: 'Workout Summary' }} />
         <Stack.Screen name="tabs" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
