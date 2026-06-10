@@ -2,7 +2,13 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
-import { deleteWorkoutSession, getExerciseLogsBySession, getWorkoutSessionById } from '../../lib/supabase';
+import { getExercisePrHighlights } from '../../lib/progression';
+import {
+  deleteWorkoutSession,
+  getExerciseHistory,
+  getExerciseLogsBySession,
+  getWorkoutSessionById,
+} from '../../lib/supabase';
 import { calculateTotalVolume, countWorkoutSets, groupExerciseLogs } from '../../lib/workouts';
 import type { ExerciseLog, WorkoutSession } from '../../types/supabase';
 
@@ -11,6 +17,7 @@ export default function WorkoutSummaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [logs, setLogs] = useState<ExerciseLog[]>([]);
+  const [prHighlights, setPrHighlights] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +46,29 @@ export default function WorkoutSummaryScreen() {
         setLogs([]);
       } else {
         setLogs(logsResult.data ?? []);
+      }
+
+      if (!logsResult.error && logsResult.data) {
+        const grouped = groupExerciseLogs(logsResult.data);
+        const highlightResults = await Promise.all(
+          grouped.map(async (group) => {
+            const historyResult = await getExerciseHistory(group.exerciseName, 60);
+
+            if (historyResult.error) {
+              return [];
+            }
+
+            const previousLogs = (historyResult.data ?? []).filter(
+              (log) => log.workout_session_id !== id,
+            );
+
+            return getExercisePrHighlights(group.exerciseName, group.logs, previousLogs);
+          }),
+        );
+
+        setPrHighlights(Array.from(new Set(highlightResults.flat())));
+      } else {
+        setPrHighlights([]);
       }
 
       setLoading(false);
@@ -123,6 +153,20 @@ export default function WorkoutSummaryScreen() {
                 label="Total volume"
                 value={totalVolume > 0 ? `${Math.round(totalVolume)} lb` : 'N/A'}
               />
+            </View>
+
+            <View style={styles.notesCard}>
+              <Text style={styles.cardTitle}>PRs from this workout</Text>
+              {prHighlights.length === 0 ? (
+                <Text style={styles.notesText}>No new PRs were detected from this session.</Text>
+              ) : (
+                prHighlights.map((highlight) => (
+                  <View key={highlight} style={styles.prRow}>
+                    <View style={styles.prDot} />
+                    <Text style={styles.prText}>{highlight}</Text>
+                  </View>
+                ))
+              )}
             </View>
 
             {session.notes ? (
@@ -232,6 +276,24 @@ const styles = StyleSheet.create({
   },
   notesText: {
     color: '#cbd5e1',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  prRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  prDot: {
+    backgroundColor: '#38bdf8',
+    borderRadius: 999,
+    height: 8,
+    width: 8,
+  },
+  prText: {
+    color: '#e2e8f0',
+    flex: 1,
     fontSize: 15,
     lineHeight: 22,
   },

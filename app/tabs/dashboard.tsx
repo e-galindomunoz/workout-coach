@@ -1,4 +1,4 @@
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,15 +12,17 @@ import {
   View,
 } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
+import { getAllPersonalBests } from '../../lib/progression';
 import {
   addBodyMetric,
   deleteBodyMetric,
+  getAllExerciseLogs,
   getBodyMetrics,
   getLatestBodyMetric,
   getRecentWorkoutSessions,
 } from '../../lib/supabase';
 import { getLatestWorkout, getWorkoutsThisWeekCount } from '../../lib/workouts';
-import type { BodyMetric, WorkoutSession } from '../../types/supabase';
+import type { BodyMetric, ExerciseLog, PersonalBestSummary, WorkoutSession } from '../../types/supabase';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -30,6 +32,7 @@ export default function DashboardScreen() {
   const [latestMetric, setLatestMetric] = useState<BodyMetric | null>(null);
   const [metrics, setMetrics] = useState<BodyMetric[]>([]);
   const [recentSessions, setRecentSessions] = useState<WorkoutSession[]>([]);
+  const [exerciseLogs, setExerciseLogs] = useState<ExerciseLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +41,11 @@ export default function DashboardScreen() {
     setLoading(true);
     setError(null);
 
-    const [latestResult, metricsResult, sessionsResult] = await Promise.all([
+    const [latestResult, metricsResult, sessionsResult, logsResult] = await Promise.all([
       getLatestBodyMetric(),
       getBodyMetrics(),
       getRecentWorkoutSessions(6),
+      getAllExerciseLogs(),
     ]);
 
     if (latestResult.error) {
@@ -64,6 +68,13 @@ export default function DashboardScreen() {
       setRecentSessions(sessionsResult.data ?? []);
     }
 
+    if (logsResult.error) {
+      setError(logsResult.error.message);
+      setExerciseLogs([]);
+    } else {
+      setExerciseLogs(logsResult.data ?? []);
+    }
+
     setLoading(false);
   }, []);
 
@@ -75,6 +86,22 @@ export default function DashboardScreen() {
   const workoutsThisWeek = useMemo(
     () => getWorkoutsThisWeekCount(recentSessions),
     [recentSessions],
+  );
+  const currentPrs = useMemo(
+    () =>
+      getAllPersonalBests(exerciseLogs)
+        .sort((left, right) => {
+          const rightDate = right.lastPerformedDate ? new Date(right.lastPerformedDate).getTime() : 0;
+          const leftDate = left.lastPerformedDate ? new Date(left.lastPerformedDate).getTime() : 0;
+
+          if (rightDate !== leftDate) {
+            return rightDate - leftDate;
+          }
+
+          return (right.bestEstimatedOneRepMax.value ?? 0) - (left.bestEstimatedOneRepMax.value ?? 0);
+        })
+        .slice(0, 3),
+    [exerciseLogs],
   );
 
   async function handleSave() {
@@ -130,7 +157,7 @@ export default function DashboardScreen() {
   return (
     <AppScreen
       title="Dashboard"
-      description="Track your latest body weight and keep a simple recent log."
+      description="See your latest workout, current PRs, and body-weight trend in one place."
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -158,6 +185,43 @@ export default function DashboardScreen() {
               : 'Start your first workout from the button above.'}
           </Text>
           <Text style={styles.summaryMeta}>Workouts this week: {workoutsThisWeek}</Text>
+        </View>
+
+        <View style={styles.prCard}>
+          <View style={styles.prHeader}>
+            <View>
+              <Text style={styles.cardLabel}>Current PRs</Text>
+              <Text style={styles.prTitle}>Top lifts right now</Text>
+            </View>
+            <Pressable onPress={() => router.push('/tabs/progress')}>
+              <Text style={styles.prLink}>View all</Text>
+            </Pressable>
+          </View>
+
+          {currentPrs.length === 0 ? (
+            <Text style={styles.cardHint}>Finish a few workouts to populate your personal bests.</Text>
+          ) : (
+            currentPrs.map((item) => (
+              <Pressable
+                key={item.exerciseName}
+                onPress={() =>
+                  router.push({
+                    pathname: '/progress/[exerciseName]',
+                    params: { exerciseName: item.exerciseName },
+                  })
+                }
+                style={({ pressed }) => [styles.prRow, pressed && styles.buttonPressed]}
+              >
+                <View style={styles.prMeta}>
+                  <Text style={styles.prExercise}>{item.exerciseName}</Text>
+                  <Text style={styles.prDetail}>
+                    {formatHeaviest(item)} · Best est. 1RM {formatEstimatedOneRepMax(item)}
+                  </Text>
+                </View>
+                <Text style={styles.prOpen}>Open</Text>
+              </Pressable>
+            ))
+          )}
         </View>
 
         <View style={styles.summaryCard}>
@@ -303,6 +367,26 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatHeaviest(item: PersonalBestSummary) {
+  if (!item.heaviestWeight.weight) {
+    return 'No load yet';
+  }
+
+  if (item.heaviestWeight.reps) {
+    return `${item.heaviestWeight.weight} lb x ${item.heaviestWeight.reps}`;
+  }
+
+  return `${item.heaviestWeight.weight} lb`;
+}
+
+function formatEstimatedOneRepMax(item: PersonalBestSummary) {
+  if (!item.bestEstimatedOneRepMax.value) {
+    return 'N/A';
+  }
+
+  return `${Math.round(item.bestEstimatedOneRepMax.value)} lb`;
+}
+
 const styles = StyleSheet.create({
   formContainer: {
     gap: 16,
@@ -322,6 +406,58 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
     padding: 18,
+  },
+  prCard: {
+    backgroundColor: '#111827',
+    borderColor: '#1f2937',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    padding: 18,
+  },
+  prHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  prTitle: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  prLink: {
+    color: '#38bdf8',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  prRow: {
+    alignItems: 'center',
+    borderTopColor: '#1f2937',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+  },
+  prMeta: {
+    flex: 1,
+    gap: 4,
+    marginRight: 12,
+  },
+  prExercise: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  prDetail: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  prOpen: {
+    color: '#38bdf8',
+    fontSize: 14,
+    fontWeight: '700',
   },
   cardLabel: {
     color: '#94a3b8',

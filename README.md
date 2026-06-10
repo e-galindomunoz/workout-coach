@@ -1,6 +1,6 @@
-# Workout Coach Stage 4
+# Workout Coach Stage 5
 
-This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, onboarding, body-weight logging, and manual workout tracking.
+This repository contains the current Expo Go-compatible foundation for an iOS-first AI Workout Coach app built with Expo, React Native, TypeScript, Expo Router, Supabase Auth, onboarding, body-weight logging, manual workout tracking, personal best tracking, and deterministic lift progression recommendations.
 
 Current scope includes:
 
@@ -17,6 +17,10 @@ Current scope includes:
 - Manual workout logging
 - Workout sessions, exercise logs, and exercise catalog
 - Workout summary and recent workout history
+- Personal best tracking in Progress
+- Exercise detail pages with recent sessions and next-weight recommendations
+- Current PR card on the Dashboard
+- Post-workout PR detection
 - Logout from Settings
 
 It does not include OpenAI or workout business logic yet.
@@ -89,7 +93,9 @@ That migration:
 - Signed in users with a completed profile are redirected to the main tabs.
 - Settings includes an `Edit fitness profile` link that reuses the same profile form.
 - The Dashboard shows the latest workout summary, workouts this week, latest body weight, and a `Start Workout` button.
-- The Workout tab shows `Start Workout`, quick stats, and recent workout sessions.
+- The Dashboard also shows a `Current PRs` card linking into Progress.
+- The Workout tab shows `Start Workout`, quick stats, recent workout sessions, and now surfaces prior performance and next targets while building a workout.
+- The Progress tab shows per-exercise personal best cards and exercise detail screens.
 
 ## Run on iPhone with Expo Go
 
@@ -107,10 +113,13 @@ That migration:
 12. Open Workout and tap `Start Workout`.
 13. Enter a workout title, add one or more exercises, and add sets with weight/reps/RPE.
 14. Finish the workout and confirm you land on the workout summary screen.
-15. Go back to Workout and confirm the session appears in recent workout history.
-16. Confirm the Dashboard shows the latest workout summary and updated workouts-this-week count.
-17. Open Settings and use Log out.
-18. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
+15. Confirm the workout summary shows any new PRs detected from that session.
+16. Go back to Workout and confirm the session appears in recent workout history.
+17. Open Progress and confirm the exercised lifts appear with updated personal bests.
+18. Open an exercise detail screen and confirm the last 5 sessions and next recommendation are shown.
+19. Confirm the Dashboard shows the latest workout summary, updated workouts-this-week count, and the `Current PRs` card.
+20. Open Settings and use Log out.
+21. Sign back in, fully close Expo Go, reopen the app, and confirm the session is restored automatically.
 
 ## Later: EAS development builds
 

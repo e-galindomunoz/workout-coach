@@ -404,6 +404,28 @@ export async function getExerciseLogsBySession(sessionId: string) {
   return result;
 }
 
+export async function getAllExerciseLogs() {
+  const userResult = await getCurrentUser();
+
+  if (userResult.error || !userResult.data) {
+    return {
+      data: null,
+      error: userResult.error ?? new Error('No authenticated user found.'),
+    };
+  }
+
+  const result = await supabase
+    .from('exercise_logs')
+    .select('*')
+    .eq('user_id', userResult.data.id)
+    .order('logged_at', { ascending: false })
+    .order('exercise_name', { ascending: true })
+    .order('set_number', { ascending: true })
+    .returns<ExerciseLog[]>();
+
+  return result;
+}
+
 export async function getExerciseHistory(exerciseName: string, limit = 20) {
   const userResult = await getCurrentUser();
 

@@ -14,11 +14,13 @@ import {
   View,
 } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
+import { getExercisePersonalBest, getProgressionRecommendation } from '../../lib/progression';
 import {
   addExerciseLogs,
   createWorkoutSession,
   finishWorkoutSession,
   getExerciseCatalog,
+  getExerciseHistory,
   upsertExerciseToCatalog,
 } from '../../lib/supabase';
 import {
@@ -28,7 +30,15 @@ import {
   createEmptyWorkout,
   getExerciseSuggestions,
 } from '../../lib/workouts';
-import type { ActiveExercise, ActiveSet, ActiveWorkout, ExerciseCatalogItem } from '../../types/supabase';
+import type {
+  ActiveExercise,
+  ActiveSet,
+  ActiveWorkout,
+  ExerciseCatalogItem,
+  ExerciseLog,
+  PersonalBestSummary,
+  ProgressionRecommendation,
+} from '../../types/supabase';
 
 export default function NewWorkoutScreen() {
   const router = useRouter();
@@ -36,6 +46,8 @@ export default function NewWorkoutScreen() {
   const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [historyByExercise, setHistoryByExercise] = useState<Record<string, ExerciseLog[]>>({});
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseMuscleGroup, setNewExerciseMuscleGroup] = useState('');
   const [saving, setSaving] = useState(false);
@@ -59,6 +71,45 @@ export default function NewWorkoutScreen() {
 
     void loadCatalog();
   }, []);
+
+  useEffect(() => {
+    const names = Array.from(
+      new Set(
+        workout.exercises
+          .map((exercise) => exercise.exerciseName.trim())
+          .filter(Boolean),
+      ),
+    );
+
+    names.forEach((name) => {
+      const key = normalizeExerciseName(name);
+
+      if (historyByExercise[key] || historyLoading[key]) {
+        return;
+      }
+
+      setHistoryLoading((current) => ({
+        ...current,
+        [key]: true,
+      }));
+
+      void getExerciseHistory(name, 40).then((result) => {
+        setHistoryLoading((current) => ({
+          ...current,
+          [key]: false,
+        }));
+
+        if (result.error) {
+          return;
+        }
+
+        setHistoryByExercise((current) => ({
+          ...current,
+          [key]: result.data ?? [],
+        }));
+      });
+    });
+  }, [historyByExercise, historyLoading, workout.exercises]);
 
   const suggestions = useMemo(
     () => getExerciseSuggestions(newExerciseName, catalog, workout.exercises).slice(0, 8),
@@ -130,6 +181,37 @@ export default function NewWorkoutScreen() {
     setNewExerciseName('');
     setNewExerciseMuscleGroup('');
     setError(null);
+  }
+
+  function applyRecommendation(
+    exerciseId: string,
+    recommendation: ProgressionRecommendation,
+  ) {
+    updateExercise(exerciseId, (current) => {
+      const firstSet = current.sets[0];
+
+      if (!firstSet) {
+        return current;
+      }
+
+      const targetReps = recommendation.recommendedRepTarget.split('-')[0]?.trim() ?? '';
+
+      return {
+        ...current,
+        sets: current.sets.map((set, index) =>
+          index === 0
+            ? {
+                ...set,
+                weight:
+                  recommendation.recommendedNextWeight !== null
+                    ? String(recommendation.recommendedNextWeight)
+                    : set.weight,
+                reps: targetReps || set.reps,
+              }
+            : set,
+        ),
+      };
+    });
   }
 
   function confirmDiscard() {
@@ -354,6 +436,64 @@ export default function NewWorkoutScreen() {
               ) : (
                 workout.exercises.map((exercise, exerciseIndex) => (
                   <View key={exercise.id} style={styles.exerciseCard}>
+                    {(() => {
+                      const historyKey = normalizeExerciseName(exercise.exerciseName);
+                      const history = historyByExercise[historyKey] ?? [];
+                      const loadingHistory = historyLoading[historyKey];
+                      const personalBest = history.length > 0 ? getExercisePersonalBest(history) : null;
+                      const recommendation =
+                        exercise.exerciseName.trim().length > 0
+                          ? getProgressionRecommendation(exercise.exerciseName.trim(), history)
+                          : null;
+
+                      return (
+                        <View style={styles.exerciseInsightCard}>
+                          <Text style={styles.exerciseInsightTitle}>Exercise insight</Text>
+                          {loadingHistory ? (
+                            <View style={styles.inlineLoadingRow}>
+                              <ActivityIndicator color="#38bdf8" size="small" />
+                              <Text style={styles.exerciseInsightText}>Loading recent performance...</Text>
+                            </View>
+                          ) : !exercise.exerciseName.trim() ? (
+                            <Text style={styles.exerciseInsightText}>
+                              Name the exercise to pull in previous bests and progression guidance.
+                            </Text>
+                          ) : history.length === 0 || !personalBest || !recommendation ? (
+                            <>
+                              <Text style={styles.exerciseInsightText}>No history yet for this exercise.</Text>
+                              <Text style={styles.exerciseInsightMuted}>
+                                Recommendation: start conservatively and use this workout to set a baseline.
+                              </Text>
+                            </>
+                          ) : (
+                            <>
+                              <Text style={styles.exerciseInsightText}>
+                                Best: {formatHeaviest(personalBest)}
+                              </Text>
+                              <Text style={styles.exerciseInsightText}>
+                                Last: {recommendation.lastPerformance}
+                              </Text>
+                              <Text style={styles.exerciseInsightText}>
+                                Next: {formatRecommendationTarget(recommendation)}
+                              </Text>
+                              <Text style={styles.exerciseInsightMuted}>{recommendation.reason}</Text>
+                              {recommendation.recommendationType !== 'not_enough_data' ? (
+                                <Pressable
+                                  onPress={() => applyRecommendation(exercise.id, recommendation)}
+                                  style={({ pressed }) => [
+                                    styles.insightButton,
+                                    pressed && styles.buttonPressed,
+                                  ]}
+                                >
+                                  <Text style={styles.insightButtonText}>Apply to first set</Text>
+                                </Pressable>
+                              ) : null}
+                            </>
+                          )}
+                        </View>
+                      );
+                    })()}
+
                     <View style={styles.exerciseHeader}>
                       <Text style={styles.exerciseTitle}>
                         {exercise.exerciseName || `Exercise ${exerciseIndex + 1}`}
@@ -602,6 +742,30 @@ function InputField({
   );
 }
 
+function normalizeExerciseName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function formatHeaviest(personalBest: PersonalBestSummary) {
+  if (!personalBest.heaviestWeight.weight) {
+    return 'No load yet';
+  }
+
+  if (personalBest.heaviestWeight.reps) {
+    return `${personalBest.heaviestWeight.weight} lb x ${personalBest.heaviestWeight.reps}`;
+  }
+
+  return `${personalBest.heaviestWeight.weight} lb`;
+}
+
+function formatRecommendationTarget(recommendation: ProgressionRecommendation) {
+  if (recommendation.recommendedNextWeight === null) {
+    return recommendation.recommendedRepTarget;
+  }
+
+  return `${recommendation.recommendedNextWeight} lb for ${recommendation.recommendedRepTarget}`;
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -735,6 +899,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 14,
     padding: 14,
+  },
+  exerciseInsightCard: {
+    backgroundColor: '#111827',
+    borderColor: '#334155',
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12,
+  },
+  exerciseInsightTitle: {
+    color: '#38bdf8',
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  exerciseInsightText: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  exerciseInsightMuted: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  inlineLoadingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  insightButton: {
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  insightButtonText: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
   },
   exerciseHeader: {
     alignItems: 'center',

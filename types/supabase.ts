@@ -121,3 +121,69 @@ export type ActiveWorkout = {
   startedAt: string;
   exercises: ActiveExercise[];
 };
+
+export type PersonalBestSummary = {
+  exerciseName: string;
+  muscleGroup: string | null;
+  heaviestWeight: {
+    weight: number | null;
+    reps: number | null;
+    loggedAt: string | null;
+    sessionId: string | null;
+  };
+  bestEstimatedOneRepMax: {
+    value: number | null;
+    weight: number | null;
+    reps: number | null;
+    loggedAt: string | null;
+    sessionId: string | null;
+  };
+  bestRepAtWeight: {
+    weight: number | null;
+    reps: number | null;
+    loggedAt: string | null;
+    sessionId: string | null;
+  };
+  highestSessionVolume: {
+    volume: number | null;
+    sessionId: string | null;
+    loggedAt: string | null;
+  };
+  mostRecentWorkingWeight: number | null;
+  mostRecentSets: Array<{
+    weight: number | null;
+    reps: number | null;
+    rpe: number | null;
+    painFlag: boolean;
+    notes: string | null;
+  }>;
+  lastPerformedDate: string | null;
+  recentTrend: 'up' | 'flat' | 'down' | 'insufficient_data';
+};
+
+export type ExerciseSessionPerformance = {
+  sessionId: string;
+  loggedAt: string;
+  muscleGroup: string | null;
+  sets: ExerciseLog[];
+  totalVolume: number;
+  topWeight: number | null;
+  bestEstimatedOneRepMax: number | null;
+};
+
+export type ProgressionRecommendation = {
+  exerciseName: string;
+  currentBest: string;
+  lastPerformance: string;
+  recommendedNextWeight: number | null;
+  recommendedRepTarget: string;
+  recommendationType:
+    | 'increase_weight'
+    | 'repeat_weight'
+    | 'reduce_weight'
+    | 'increase_reps'
+    | 'deload_or_caution'
+    | 'not_enough_data';
+  reason: string;
+  confidence: 'low' | 'medium' | 'high';
+};
