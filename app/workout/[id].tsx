@@ -22,6 +22,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatCard } from '../../components/ui/StatCard';
 import { getWorkoutInsight } from '../../lib/coachApi';
 import { getCoachContext } from '../../lib/coachContext';
+import { normalizeWorkoutInsightResponse } from '../../lib/aiValidation';
 import { getExercisePrHighlights } from '../../lib/progression';
 import {
   deleteWorkoutSession,
@@ -134,6 +135,7 @@ export default function WorkoutSummaryScreen() {
             previous: pr.previousValue,
             current: pr.currentValue,
           })),
+          painFlagCount: logs.filter((log) => log.pain_flag).length,
         },
         profile: ctx.profile,
         recentTraining: ctx.recentTraining,
@@ -143,7 +145,12 @@ export default function WorkoutSummaryScreen() {
       if (result.error || !result.data) {
         setInsightError(result.error?.message ?? 'Could not reach the coach. Check your connection.');
       } else {
-        setInsightResult(result.data);
+        setInsightResult(
+          normalizeWorkoutInsightResponse(
+            result.data,
+            logs.some((log) => log.pain_flag) ? 'Use caution and stop if symptoms worsen.' : null,
+          ),
+        );
         setInsightModalVisible(true);
       }
     } finally {
@@ -250,15 +257,30 @@ export default function WorkoutSummaryScreen() {
             <Card style={styles.insightCard}>
               <SectionHeader
                 title="Coach Insight"
-                subtitle="AI analysis of this session using your training data."
+                subtitle="AI analysis of this session using your recent logs + PRs."
               />
               {insightError ? (
-                <Text style={styles.insightError}>{insightError}</Text>
+                <>
+                  <Text style={styles.insightError}>{insightError}</Text>
+                  <Button
+                    label="Try Again"
+                    onPress={() => void handleGetInsight()}
+                    variant="secondary"
+                  />
+                </>
               ) : null}
               <Button
-                label={insightLoading ? 'Analyzing...' : insightResult ? 'View Insight' : 'Get Coach Insight'}
+                label={
+                  insightLoading
+                    ? 'Analyzing...'
+                    : insightResult
+                      ? 'View Insight'
+                      : 'Get Coach Insight'
+                }
                 loading={insightLoading}
-                onPress={insightResult ? () => setInsightModalVisible(true) : () => void handleGetInsight()}
+                onPress={
+                  insightResult ? () => setInsightModalVisible(true) : () => void handleGetInsight()
+                }
                 variant="secondary"
               />
             </Card>
@@ -317,6 +339,7 @@ export default function WorkoutSummaryScreen() {
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.modalTitle}>Coach Insight</Text>
+              <Text style={styles.modalSubtitle}>Using your recent logs + PRs</Text>
 
               {insightResult?.safetyNote ? (
                 <View style={styles.safetyBanner}>
@@ -498,6 +521,14 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.xxl,
     fontWeight: '800',
     letterSpacing: -0.4,
+  },
+  modalSubtitle: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginTop: -spacing.sm,
+    textTransform: 'uppercase',
   },
   safetyBanner: {
     backgroundColor: colors.dangerSurface,

@@ -37,6 +37,7 @@ export type WorkoutInsightRequest = {
     durationMinutes: number | null;
     exercises: WorkoutInsightCompletedExercise[];
     newPRs: WorkoutInsightPR[];
+    painFlagCount?: number;
   };
   // exercise_detail only
   exerciseName?: string;

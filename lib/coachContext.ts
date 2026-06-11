@@ -75,6 +75,7 @@ export type SelectedExerciseContext = {
   exerciseName: string;
   recentSessions: Array<{ date: string; sets: string[] }>;
   recommendation: { type: string; target: string; reason: string } | null;
+  painFlagCount: number;
 };
 
 export type CoachContext = {
@@ -93,8 +94,8 @@ export type CoachContext = {
  * include drill-down history for that specific lift.
  */
 export async function getCoachContext(userMessage?: string): Promise<CoachContext> {
-  // Fetch in parallel. Sessions limited to 5; logs fetch all but only summaries
-  // are sent — raw logs are used only for local computation (progression, PRs).
+  // Fetch in parallel. The AI payload stays compact: recent sessions are capped,
+  // deterministic PR/progression logic runs locally, and only summaries are sent.
   const [profileResult, metricsResult, sessionsResult, logsResult] = await Promise.all([
     getProfile(),
     getBodyMetrics(),
@@ -253,6 +254,7 @@ export function buildSelectedExerciseContext(
     }));
 
   const recommendation = getProgressionRecommendation(exerciseName, exerciseLogs);
+  const painFlagCount = exerciseLogs.filter((log) => log.pain_flag).length;
 
   return {
     exerciseName,
@@ -268,6 +270,7 @@ export function buildSelectedExerciseContext(
             reason: recommendation.reason,
           }
         : null,
+    painFlagCount,
   };
 }
 

@@ -14,6 +14,8 @@ All functions:
 - Require a valid user JWT (`Authorization: Bearer <token>`)
 - Return mocked responses until `OPENAI_API_KEY` is set as a secret
 - Handle CORS preflight (`OPTIONS`)
+- Keep logs free of raw OpenAI keys or auth tokens
+- Return safe fallbacks if OpenAI returns malformed JSON
 
 ---
 
@@ -54,7 +56,7 @@ Verify they're live in the Supabase dashboard under **Edge Functions**.
 
 ---
 
-## Set OPENAI_API_KEY (Stage 8)
+## Set OPENAI_API_KEY (Supabase secret)
 
 Once you're ready to wire in real AI responses:
 
@@ -83,13 +85,14 @@ The functions check `Deno.env.get('OPENAI_API_KEY')` — if the secret is presen
    ```
 4. Log in with your account
 5. Go to the **Coach** tab
-6. Tap **Test AI Connection**
+6. Send a short message like `Summarize my week`
 7. You should see a response card with the coach reply, safety level, and suggested actions
 
 If you get a network error, check:
 - Functions are deployed (Supabase dashboard → Edge Functions)
 - You're logged in to the app (JWT is required)
 - `EXPO_PUBLIC_SUPABASE_URL` matches your project URL
+- `OPENAI_API_KEY` is set as a Supabase secret, not in the Expo app
 
 ---
 

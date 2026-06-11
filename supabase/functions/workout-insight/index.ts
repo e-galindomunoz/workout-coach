@@ -1,6 +1,12 @@
 // @ts-ignore Deno import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
+import {
+  buildSafetyNote,
+  extractString,
+  normalizeStringArray,
+  parseJsonObject,
+} from '../_shared/aiValidation.ts';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,12 +17,14 @@ interface WorkoutInsightRequest {
     durationMinutes: number | null;
     exercises: Array<{ name: string; totalSets: number; sets: string[] }>;
     newPRs: Array<{ exercise: string; label: string; previous: string; current: string }>;
+    painFlagCount?: number;
   };
   exerciseName?: string;
   exerciseContext?: {
     exerciseName: string;
     recentSessions: Array<{ date: string; sets: string[] }>;
     recommendation: { type: string; target: string; reason: string } | null;
+    painFlagCount?: number;
   };
   profile?: Record<string, unknown> | null;
   recentTraining?: Record<string, unknown>;
@@ -73,27 +81,91 @@ JSON only:
   "safetyNote": null
 }`;
 
+function getSafetyNoteFromRequest(body: WorkoutInsightRequest): string | null {
+  const painFlagCount =
+    body.completedWorkout?.painFlagCount ?? body.exerciseContext?.painFlagCount ?? 0;
+
+  return painFlagCount > 0 ? buildSafetyNote('caution') : null;
+}
+
+function buildFallbackInsight(body: WorkoutInsightRequest): WorkoutInsightResponse {
+  const safetyNote = getSafetyNoteFromRequest(body);
+
+  if (body.mode === 'exercise_detail' && body.exerciseName) {
+    const recommendation = body.exerciseContext?.recommendation;
+    return {
+      summary: `${body.exerciseName} data loaded. Please try again to get the AI analysis.`,
+      wins: ['Exercise history retrieved', 'Deterministic targets computed'],
+      nextFocus: recommendation
+        ? recommendation.reason
+        : 'Use the current progression target as your baseline and keep the session conservative if symptoms were flagged.',
+      nextTargets: recommendation
+        ? [
+            {
+              exerciseName: body.exerciseName,
+              target: recommendation.target,
+              reason: recommendation.reason,
+            },
+          ]
+        : [],
+      safetyNote,
+    };
+  }
+
+  const fallbackTargets = Array.isArray(body.progressionRecommendations)
+    ? body.progressionRecommendations
+        .map((item) => {
+          if (!item || typeof item !== 'object') {
+            return null;
+          }
+
+          const record = item as Record<string, unknown>;
+          const exerciseName = extractString(record.exercise);
+          const target = extractString(record.target);
+          const reason = extractString(record.reason);
+
+          if (!exerciseName || !target || !reason) {
+            return null;
+          }
+
+          return { exerciseName, target, reason };
+        })
+        .filter((item): item is { exerciseName: string; target: string; reason: string } => Boolean(item))
+        .slice(0, 3)
+    : [];
+
+  return {
+    summary: 'Workout data received. Please try again to get the AI analysis.',
+    wins: ['Session logged successfully'],
+    nextFocus: safetyNote
+      ? 'Keep the next session conservative and stop if symptoms worsen.'
+      : 'Review the session details and try again if you want a deeper analysis.',
+    nextTargets: fallbackTargets,
+    safetyNote,
+  };
+}
+
 // ─── Content builder ──────────────────────────────────────────────────────────
 
 function buildUserContent(body: WorkoutInsightRequest): string {
   const sections: string[] = [];
 
   if (body.profile) {
-    sections.push(`ATHLETE PROFILE:\n${JSON.stringify(body.profile, null, 1)}`);
+    sections.push(`ATHLETE PROFILE:\n${JSON.stringify(body.profile)}`);
   }
 
   if (body.mode === 'post_workout' && body.completedWorkout) {
-    sections.push(`COMPLETED WORKOUT:\n${JSON.stringify(body.completedWorkout, null, 1)}`);
+    sections.push(`COMPLETED WORKOUT:\n${JSON.stringify(body.completedWorkout)}`);
     if (body.progressionRecommendations && body.progressionRecommendations.length > 0) {
-      sections.push(`PROGRESSION TARGETS:\n${JSON.stringify(body.progressionRecommendations, null, 1)}`);
+      sections.push(`PROGRESSION TARGETS:\n${JSON.stringify(body.progressionRecommendations)}`);
     }
     if (body.recentTraining) {
-      sections.push(`RECENT TRAINING CONTEXT:\n${JSON.stringify(body.recentTraining, null, 1)}`);
+      sections.push(`RECENT TRAINING CONTEXT:\n${JSON.stringify(body.recentTraining)}`);
     }
   } else if (body.mode === 'exercise_detail') {
     if (body.exerciseName) sections.push(`EXERCISE: ${body.exerciseName}`);
     if (body.exerciseContext) {
-      sections.push(`EXERCISE HISTORY:\n${JSON.stringify(body.exerciseContext, null, 1)}`);
+      sections.push(`EXERCISE HISTORY:\n${JSON.stringify(body.exerciseContext)}`);
     }
   }
 
@@ -130,7 +202,7 @@ Deno.serve(async (req: any) => {
     const OPENAI_API_KEY = (Deno as any).env.get('OPENAI_API_KEY');
 
     if (!OPENAI_API_KEY) {
-      return jsonResponse(getMockInsight(body));
+      return jsonResponse(buildFallbackInsight(body));
     }
 
     const systemPrompt = body.mode === 'post_workout' ? POST_WORKOUT_SYSTEM : EXERCISE_DETAIL_SYSTEM;
@@ -149,60 +221,65 @@ Deno.serve(async (req: any) => {
           { role: 'user', content: userContent },
         ],
         response_format: { type: 'json_object' },
-        max_tokens: 500,
-        temperature: 0.5,
+        max_tokens: 320,
+        temperature: 0.45,
       }),
     });
 
     if (!openAIRes.ok) {
-      const errText = await openAIRes.text();
-      console.error('OpenAI error:', openAIRes.status, errText);
-      return errorResponse(502, `AI service error: ${openAIRes.status}`);
+      console.error('OpenAI error:', openAIRes.status);
+      return jsonResponse(buildFallbackInsight(body));
     }
 
     const completion = await openAIRes.json();
     const rawContent: string = completion.choices?.[0]?.message?.content ?? '{}';
 
-    let parsed: Partial<WorkoutInsightResponse>;
-    try {
-      parsed = JSON.parse(rawContent);
-    } catch {
-      console.error('Failed to parse OpenAI JSON:', rawContent);
-      return errorResponse(502, 'AI returned an unexpected response format');
+    const parsed = parseJsonObject(rawContent);
+    if (!parsed) {
+      console.error('Failed to parse OpenAI JSON response');
+      return jsonResponse(buildFallbackInsight(body));
     }
 
+    const safetyNote = getSafetyNoteFromRequest(body);
     const response: WorkoutInsightResponse = {
-      summary: parsed.summary ?? 'Could not generate a summary.',
-      wins: parsed.wins ?? [],
-      nextFocus: parsed.nextFocus ?? '',
-      nextTargets: parsed.nextTargets ?? [],
-      safetyNote: parsed.safetyNote ?? null,
+      summary: extractString(parsed.summary) || buildFallbackInsight(body).summary,
+      wins: normalizeStringArray(parsed.wins).slice(0, 4),
+      nextFocus: extractString(parsed.nextFocus),
+      nextTargets: Array.isArray(parsed.nextTargets)
+        ? parsed.nextTargets
+            .map((target) => {
+              if (!target || typeof target !== 'object') {
+                return null;
+              }
+
+              const record = target as Record<string, unknown>;
+              const exerciseName = extractString(record.exerciseName);
+              const targetValue = extractString(record.target);
+              const reason = extractString(record.reason);
+
+              if (!exerciseName || !targetValue || !reason) {
+                return null;
+              }
+
+              return { exerciseName, target: targetValue, reason };
+            })
+            .filter((item): item is { exerciseName: string; target: string; reason: string } => Boolean(item))
+            .slice(0, 4)
+        : [],
+      safetyNote: extractString(parsed.safetyNote, safetyNote ?? '') || safetyNote,
     };
 
     return jsonResponse(response);
   } catch (err) {
     console.error('workout-insight error:', err);
-    return errorResponse(500, err instanceof Error ? err.message : 'Internal server error');
+    return jsonResponse(buildFallbackInsight({
+      mode: 'post_workout',
+      completedWorkout: {
+        title: 'Workout',
+        durationMinutes: null,
+        exercises: [],
+        newPRs: [],
+      },
+    }));
   }
 });
-
-// ─── Mock fallback ─────────────────────────────────────────────────────────────
-
-function getMockInsight(body: WorkoutInsightRequest): WorkoutInsightResponse {
-  if (body.mode === 'exercise_detail' && body.exerciseName) {
-    return {
-      summary: `${body.exerciseName} data loaded. Set OPENAI_API_KEY as a Supabase secret to get real AI analysis.`,
-      wins: ['Exercise history retrieved', 'Deterministic targets computed'],
-      nextFocus: 'Deploy OPENAI_API_KEY to unlock real coaching insights for this lift.',
-      nextTargets: [],
-      safetyNote: null,
-    };
-  }
-  return {
-    summary: 'Workout data received. Set OPENAI_API_KEY as a Supabase secret to get real post-workout AI analysis.',
-    wins: ['Session logged successfully'],
-    nextFocus: 'Deploy OPENAI_API_KEY to unlock real post-workout coaching.',
-    nextTargets: [],
-    safetyNote: null,
-  };
-}

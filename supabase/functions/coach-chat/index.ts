@@ -1,6 +1,14 @@
 // @ts-ignore Deno import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders, errorResponse, jsonResponse } from '../_shared/cors.ts';
+import {
+  buildSafetyNote,
+  extractString,
+  inferSafetyLevel,
+  normalizeSafetyLevel,
+  normalizeStringArray,
+  parseJsonObject,
+} from '../_shared/aiValidation.ts';
 
 // ─── Types (mirror of client types/ai.ts) ─────────────────────────────────────
 
@@ -54,6 +62,47 @@ Fields:
 - suggestedActions: 2-3 natural follow-up questions the user might ask next
 - referencedData: specific data points you cited (keep brief). Empty array if none.`;
 
+function buildStaticSafetyResponse(level: 'caution' | 'stop'): CoachChatResponse {
+  return {
+    reply:
+      level === 'stop'
+        ? 'Stop the workout now and seek guidance from a healthcare professional before continuing.'
+        : 'Keep the session conservative, avoid pushing through pain, and stop if symptoms worsen.',
+    safetyLevel: level,
+    suggestedActions:
+      level === 'stop'
+        ? ['Stop the workout', 'Seek professional guidance']
+        : ['Reduce load', 'Keep the session lighter'],
+    referencedData: [],
+  };
+}
+
+function buildFallbackResponse(message: string, context: CoachChatRequest['context']): CoachChatResponse {
+  const level = inferSafetyLevel(message);
+  if (level !== 'normal') {
+    return buildStaticSafetyResponse(level);
+  }
+
+  const recentTraining = context.recentTraining as { sessions?: unknown[] };
+  const hasData =
+    Boolean(context.profile) ||
+    (Array.isArray(recentTraining.sessions) && recentTraining.sessions.length > 0) ||
+    (context.personalBests?.length ?? 0) > 0 ||
+    (context.progressionRecommendations?.length ?? 0) > 0 ||
+    Boolean(context.selectedExercise);
+
+  return {
+    reply: hasData
+      ? 'I could not parse the coach response. Please try again.'
+      : 'Log a workout first, then ask again and I can coach from your recent training data.',
+    safetyLevel: 'normal',
+    suggestedActions: hasData
+      ? ['Try again', 'Ask a shorter question']
+      : ['Log a workout', 'Ask about your next target'],
+    referencedData: [],
+  };
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 // deno-lint-ignore no-explicit-any
@@ -89,12 +138,16 @@ Deno.serve(async (req: any) => {
       return errorResponse(400, 'message is required');
     }
 
+    const detectedSafetyLevel = inferSafetyLevel(message);
+    if (detectedSafetyLevel !== 'normal') {
+      return jsonResponse(buildStaticSafetyResponse(detectedSafetyLevel));
+    }
+
     // deno-lint-ignore no-explicit-any
     const OPENAI_API_KEY = (Deno as any).env.get('OPENAI_API_KEY');
 
     if (!OPENAI_API_KEY) {
-      // No API key set yet — return a helpful mock so the pipeline can be tested
-      return jsonResponse(getMockResponse(message));
+      return jsonResponse(buildFallbackResponse(message, context));
     }
 
     // Build user message with context
@@ -113,39 +166,46 @@ Deno.serve(async (req: any) => {
           { role: 'user', content: userContent },
         ],
         response_format: { type: 'json_object' },
-        max_tokens: 600,
-        temperature: 0.7,
+        max_tokens: 280,
+        temperature: 0.5,
       }),
     });
 
     if (!openAIRes.ok) {
-      const errText = await openAIRes.text();
-      console.error('OpenAI error:', openAIRes.status, errText);
-      return errorResponse(502, `AI service error: ${openAIRes.status}`);
+      console.error('OpenAI error:', openAIRes.status);
+      return jsonResponse(buildFallbackResponse(message, context));
     }
 
     const completion = await openAIRes.json();
     const rawContent: string = completion.choices?.[0]?.message?.content ?? '{}';
 
-    let parsed: Partial<CoachChatResponse>;
-    try {
-      parsed = JSON.parse(rawContent);
-    } catch {
-      console.error('Failed to parse OpenAI JSON:', rawContent);
-      return errorResponse(502, 'AI returned an unexpected response format');
+    const parsed = parseJsonObject(rawContent);
+    if (!parsed) {
+      console.error('Failed to parse OpenAI JSON response');
+      return jsonResponse(buildFallbackResponse(message, context));
     }
 
     const response: CoachChatResponse = {
-      reply: parsed.reply ?? 'I could not generate a response. Please try again.',
-      safetyLevel: parsed.safetyLevel ?? 'normal',
-      suggestedActions: parsed.suggestedActions ?? [],
-      referencedData: parsed.referencedData ?? [],
+      reply:
+        extractString(parsed.reply) ||
+        buildFallbackResponse(message, context).reply,
+      safetyLevel: normalizeSafetyLevel(
+        parsed.safetyLevel,
+        detectedSafetyLevel === 'normal' ? 'normal' : detectedSafetyLevel,
+      ),
+      suggestedActions: normalizeStringArray(parsed.suggestedActions).slice(0, 3),
+      referencedData: normalizeStringArray(parsed.referencedData).slice(0, 4),
     };
 
     return jsonResponse(response);
   } catch (err) {
     console.error('coach-chat error:', err);
-    return errorResponse(500, err instanceof Error ? err.message : 'Internal server error');
+    return jsonResponse(buildFallbackResponse('Unexpected error', {
+      profile: null,
+      recentTraining: { workoutsThisWeek: 0, lastWorkoutDate: null, bodyWeightTrend: null, sessions: [] },
+      personalBests: [],
+      progressionRecommendations: [],
+    }));
   }
 });
 
@@ -155,54 +215,27 @@ function buildUserContent(message: string, context: CoachChatRequest['context'])
   const sections: string[] = [];
 
   if (context.profile) {
-    sections.push(`ATHLETE PROFILE:\n${JSON.stringify(context.profile, null, 1)}`);
+    sections.push(`ATHLETE PROFILE:\n${JSON.stringify(context.profile)}`);
   }
 
-  sections.push(`RECENT TRAINING:\n${JSON.stringify(context.recentTraining, null, 1)}`);
+  sections.push(`RECENT TRAINING:\n${JSON.stringify(context.recentTraining)}`);
 
   if (context.personalBests.length > 0) {
-    sections.push(`TOP PERSONAL BESTS:\n${JSON.stringify(context.personalBests, null, 1)}`);
+    sections.push(`TOP PERSONAL BESTS:\n${JSON.stringify(context.personalBests)}`);
   }
 
   if (context.progressionRecommendations.length > 0) {
     sections.push(
-      `PROGRESSION RECOMMENDATIONS:\n${JSON.stringify(context.progressionRecommendations, null, 1)}`,
+      `PROGRESSION RECOMMENDATIONS:\n${JSON.stringify(context.progressionRecommendations)}`,
     );
   }
 
   if (context.selectedExercise) {
-    sections.push(
-      `EXERCISE DRILL-DOWN:\n${JSON.stringify(context.selectedExercise, null, 1)}`,
-    );
+    sections.push(`EXERCISE DRILL-DOWN:\n${JSON.stringify(context.selectedExercise)}`);
   }
 
   sections.push(`USER MESSAGE:\n${message}`);
+  sections.push(`SAFETY CONTEXT:\n${buildSafetyNote(inferSafetyLevel(message)) ?? 'none'}`);
 
   return sections.join('\n\n');
-}
-
-function getMockResponse(message: string): CoachChatResponse {
-  const lower = message.toLowerCase();
-
-  if (lower.includes('test') || lower.includes('hello') || lower.includes('connection')) {
-    return {
-      reply:
-        'Connection verified. I am your AI training coach. Once OPENAI_API_KEY is set as a Supabase secret, I will respond using your real workout data. The full auth pipeline is working correctly.',
-      safetyLevel: 'normal',
-      suggestedActions: [
-        'What should I do today?',
-        'Summarize my week',
-        'Should I increase weight?',
-      ],
-      referencedData: [],
-    };
-  }
-
-  return {
-    reply:
-      'The AI coach backend is connected but OPENAI_API_KEY has not been set yet. Deploy the secret with: supabase secrets set OPENAI_API_KEY=sk-... and I will respond with real coaching based on your training data.',
-    safetyLevel: 'normal',
-    suggestedActions: ['What should I do today?', 'Summarize my week'],
-    referencedData: [],
-  };
 }

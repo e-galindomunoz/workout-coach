@@ -22,6 +22,7 @@ import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Pill } from '../../components/ui/Pill';
 import { SectionHeader } from '../../components/ui/SectionHeader';
+import { normalizeAdjustWorkoutResponse } from '../../lib/aiValidation';
 import { requestWorkoutAdjustment } from '../../lib/coachApi';
 import { getCoachContext } from '../../lib/coachContext';
 import type { MuscleGroup, PresetExercise } from '../../lib/exerciseLibrary';
@@ -315,7 +316,7 @@ export default function NewWorkoutScreen() {
         setAdjustError(result.error?.message ?? 'Could not reach the coach. Check your connection.');
         setAdjustStep('result');
       } else {
-        setAdjustResult(result.data);
+        setAdjustResult(normalizeAdjustWorkoutResponse(result.data, req));
         setAdjustStep('result');
       }
     } catch {
@@ -928,6 +929,7 @@ export default function NewWorkoutScreen() {
                 <Text style={styles.modalSubtitle}>
                   Tell the coach what you need. It will propose changes — you decide whether to apply.
                 </Text>
+                <Text style={styles.modalContextNote}>Using your recent logs + PRs</Text>
 
                 <TextInput
                   autoFocus
@@ -991,7 +993,7 @@ export default function NewWorkoutScreen() {
                     <Text style={styles.adjustError}>{adjustError}</Text>
                     <Button
                       label="Try Again"
-                      onPress={() => setAdjustStep('input')}
+                      onPress={() => void handleAskCoach()}
                       variant="secondary"
                     />
                   </>
@@ -1035,10 +1037,10 @@ export default function NewWorkoutScreen() {
                         onPress={() => setAdjustModalVisible(false)}
                         variant="ghost"
                       />
-                      {!adjustResult.safetyNote && (
+                      {adjustResult.updatedWorkoutPatch && !isStopSafetyNote(adjustResult.safetyNote) && (
                         <View style={styles.modalActionFlex}>
                           <Button
-                            label="Apply Changes"
+                            label={adjustResult.safetyNote ? 'Apply Conservative Changes' : 'Apply Changes'}
                             onPress={() => {
                               applyWorkoutPatch(adjustResult.updatedWorkoutPatch);
                               setAdjustModalVisible(false);
@@ -1080,6 +1082,10 @@ function formatRecommendationTarget(recommendation: ProgressionRecommendation) {
   }
 
   return `Next: ${recommendation.recommendedNextWeight} lb × ${recommendation.recommendedRepTarget}`;
+}
+
+function isStopSafetyNote(note: string | null) {
+  return Boolean(note && note.toLowerCase().startsWith('stop'));
 }
 
 const styles = StyleSheet.create({
@@ -1336,6 +1342,11 @@ const styles = StyleSheet.create({
     fontSize: fontSizes.md,
     lineHeight: 22,
     marginTop: -spacing.sm,
+  },
+  modalContextNote: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
   },
   adjustInput: {
     backgroundColor: colors.surfaceInput,

@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { sendCoachMessage } from '../../lib/coachApi';
 import { getCoachContext } from '../../lib/coachContext';
+import { normalizeCoachChatResponse } from '../../lib/aiValidation';
 import { clearCoachMessages, getCoachMessages, saveCoachMessage } from '../../lib/supabase';
 import { colors, fontSizes, radius, spacing } from '../../lib/theme';
 import type { CoachMessage } from '../../types/ai';
@@ -103,13 +104,14 @@ export default function CoachScreen() {
         return;
       }
 
+      const normalized = normalizeCoachChatResponse(data, text);
       const assistantMsg: CoachMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        content: data.reply,
-        safetyLevel: data.safetyLevel,
-        suggestedActions: data.suggestedActions,
-        referencedData: data.referencedData,
+        content: normalized.reply,
+        safetyLevel: normalized.safetyLevel,
+        suggestedActions: normalized.suggestedActions,
+        referencedData: normalized.referencedData,
         createdAt: new Date().toISOString(),
       };
 
@@ -117,11 +119,11 @@ export default function CoachScreen() {
 
       void saveCoachMessage({
         role: 'assistant',
-        content: data.reply,
+        content: normalized.reply,
         metadata: {
-          safetyLevel: data.safetyLevel,
-          suggestedActions: data.suggestedActions,
-          referencedData: data.referencedData,
+          safetyLevel: normalized.safetyLevel,
+          suggestedActions: normalized.suggestedActions,
+          referencedData: normalized.referencedData,
         },
       });
     },
@@ -281,7 +283,8 @@ function EmptyState({ onPromptPress }: { onPromptPress: (p: string) => void }) {
       <Text style={styles.emptyTitle}>Your AI Coach</Text>
       <Text style={styles.emptyBody}>
         Ask anything about your workouts, progress, or what to do next. I use your real training
-        data — PRs, session history, and progression targets — not generic advice.
+        data — PRs, session history, and progression targets — not generic advice. Once you log
+        workouts, I can ground answers in your recent logs and PRs.
       </Text>
 
       <Text style={styles.promptsLabel}>Try asking</Text>
@@ -318,6 +321,7 @@ function MessageBubble({
       )}
       <View style={styles.bubbleColumn}>
         <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}>
+          {!isUser ? <Text style={styles.assistantLabel}>AI Coach</Text> : null}
           {/* Safety banner */}
           {!isUser && message.safetyLevel && message.safetyLevel !== 'normal' && (
             <View
@@ -514,6 +518,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderBottomLeftRadius: 4,
+  },
+  assistantLabel: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   bubbleText: {
     fontSize: fontSizes.md,

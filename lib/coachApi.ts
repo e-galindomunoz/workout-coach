@@ -14,13 +14,22 @@ function notConfigured<T>(): ApiResult<T> {
   return { data: null, error: new Error(supabaseConfigError) };
 }
 
+async function getAuthHeaders() {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 export async function sendCoachMessage(
   message: string,
   context: CoachContext,
 ): Promise<ApiResult<CoachChatResponse>> {
   if (!isSupabaseConfigured) return notConfigured();
 
+  const headers = await getAuthHeaders();
   const { data, error } = await supabase.functions.invoke<CoachChatResponse>('coach-chat', {
+    ...(headers ? { headers } : {}),
     body: { message, context },
   });
 
@@ -35,9 +44,10 @@ export async function getWorkoutInsight(
 ): Promise<ApiResult<WorkoutInsightResponse>> {
   if (!isSupabaseConfigured) return notConfigured();
 
+  const headers = await getAuthHeaders();
   const { data, error } = await supabase.functions.invoke<WorkoutInsightResponse>(
     'workout-insight',
-    { body: request },
+    { ...(headers ? { headers } : {}), body: request },
   );
 
   return {
@@ -51,9 +61,10 @@ export async function requestWorkoutAdjustment(
 ): Promise<ApiResult<AdjustWorkoutResponse>> {
   if (!isSupabaseConfigured) return notConfigured();
 
+  const headers = await getAuthHeaders();
   const { data, error } = await supabase.functions.invoke<AdjustWorkoutResponse>(
     'adjust-workout',
-    { body: adjustRequest },
+    { ...(headers ? { headers } : {}), body: adjustRequest },
   );
 
   return {

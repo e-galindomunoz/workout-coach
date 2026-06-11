@@ -22,6 +22,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatCard } from '../../components/ui/StatCard';
 import { getWorkoutInsight } from '../../lib/coachApi';
 import { buildSelectedExerciseContext } from '../../lib/coachContext';
+import { normalizeWorkoutInsightResponse } from '../../lib/aiValidation';
 import {
   getBestSetForExercise,
   getExercisePersonalBest,
@@ -115,7 +116,12 @@ export default function ExerciseDetailScreen() {
       if (result.error || !result.data) {
         setInsightError(result.error?.message ?? 'Could not reach the coach. Check your connection.');
       } else {
-        setInsightResult(result.data);
+        setInsightResult(
+          normalizeWorkoutInsightResponse(
+            result.data,
+            logs.some((log) => log.pain_flag) ? 'Use caution and stop if symptoms worsen.' : null,
+          ),
+        );
         setInsightModalVisible(true);
       }
     } finally {
@@ -197,10 +203,17 @@ export default function ExerciseDetailScreen() {
             <Card style={styles.coachCard}>
               <SectionHeader
                 title="Ask Coach"
-                subtitle="AI analysis of this lift using your real history."
+                subtitle="AI analysis of this lift using your recent logs + PRs."
               />
               {insightError ? (
-                <Text style={styles.insightError}>{insightError}</Text>
+                <>
+                  <Text style={styles.insightError}>{insightError}</Text>
+                  <Button
+                    label="Try Again"
+                    onPress={() => void handleAskCoach()}
+                    variant="secondary"
+                  />
+                </>
               ) : null}
               <Button
                 label={
@@ -281,6 +294,7 @@ export default function ExerciseDetailScreen() {
             >
               <Text style={styles.modalTitle}>{exerciseName}</Text>
               <Text style={styles.modalSubtitle}>Coach Analysis</Text>
+              <Text style={styles.modalContextNote}>Using your recent logs + PRs</Text>
 
               {insightResult?.safetyNote ? (
                 <View style={styles.safetyBanner}>
@@ -514,6 +528,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginTop: -spacing.sm,
     textTransform: 'uppercase',
+  },
+  modalContextNote: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
   },
   safetyBanner: {
     backgroundColor: colors.dangerSurface,
