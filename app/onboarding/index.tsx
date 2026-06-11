@@ -22,8 +22,8 @@ export default function OnboardingScreen() {
 
   return (
     <AppScreen
-      title="Build your fitness profile"
-      description="Complete your onboarding so the app can route you into the main experience."
+      title="Build Your Profile"
+      description="Tell us about your training so we can tailor your experience."
       fillContent
       scrollEnabled={false}
     >

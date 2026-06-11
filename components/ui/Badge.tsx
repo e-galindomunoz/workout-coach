@@ -1,13 +1,14 @@
-import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 
-type PillProps = {
-  label: string;
-  tone?: 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'pr';
-  style?: StyleProp<ViewStyle>;
+type BadgeTone = 'default' | 'accent' | 'success' | 'warning' | 'danger' | 'pr';
+
+type BadgeProps = {
+  label: string | number;
+  tone?: BadgeTone;
 };
 
-export function Pill({ label, tone = 'default', style }: PillProps) {
+export function Badge({ label, tone = 'default' }: BadgeProps) {
   return (
     <View
       style={[
@@ -17,7 +18,6 @@ export function Pill({ label, tone = 'default', style }: PillProps) {
         tone === 'warning' && styles.warning,
         tone === 'danger' && styles.danger,
         tone === 'pr' && styles.pr,
-        style,
       ]}
     >
       <Text
@@ -39,12 +39,13 @@ export function Pill({ label, tone = 'default', style }: PillProps) {
 const styles = StyleSheet.create({
   base: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.pillBg,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.borderStrong,
     borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
+    minWidth: 22,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
   },
   accent: {
     backgroundColor: colors.accentDim,
@@ -70,21 +71,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSizes.xs,
     fontWeight: fontWeights.heavy,
-    letterSpacing: 0.3,
+    textAlign: 'center',
   },
-  labelAccent: {
-    color: colors.accent,
-  },
-  labelSuccess: {
-    color: colors.success,
-  },
-  labelWarning: {
-    color: colors.warning,
-  },
-  labelDanger: {
-    color: colors.danger,
-  },
-  labelPr: {
-    color: colors.accentPR,
-  },
+  labelAccent: { color: colors.accent },
+  labelSuccess: { color: colors.success },
+  labelWarning: { color: colors.warning },
+  labelDanger: { color: colors.danger },
+  labelPr: { color: colors.accentPR },
 });

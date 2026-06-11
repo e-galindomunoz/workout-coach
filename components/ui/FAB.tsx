@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, radius, shadows, spacing } from '../../lib/theme';
 
 type FABAction = {
   label: string;
@@ -36,7 +36,7 @@ export function FAB({ actions }: FABProps) {
         )}
         <Pressable
           onPress={() => setOpen((v) => !v)}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+          style={({ pressed }) => [styles.button, shadows.glow, pressed && styles.buttonPressed]}
         >
           <Text style={styles.icon}>{open ? '×' : '+'}</Text>
         </Pressable>
@@ -74,16 +74,16 @@ const styles = StyleSheet.create({
   },
   action: {
     backgroundColor: colors.surface,
-    borderColor: colors.borderAccent,
+    borderColor: colors.accentBorder,
     borderRadius: radius.pill,
     borderWidth: 1,
-    elevation: 6,
+    elevation: 8,
     paddingHorizontal: spacing.xl,
     paddingVertical: 13,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.32,
-    shadowRadius: 10,
+    shadowOpacity: 0.36,
+    shadowRadius: 12,
   },
   actionPressed: {
     opacity: 0.78,
@@ -91,26 +91,22 @@ const styles = StyleSheet.create({
   actionLabel: {
     color: colors.text,
     fontSize: fontSizes.md,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
   },
   button: {
     alignItems: 'center',
     backgroundColor: colors.accent,
     borderRadius: radius.pill,
-    elevation: 8,
+    elevation: 10,
     height: 60,
     justifyContent: 'center',
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
     width: 60,
   },
   buttonPressed: {
-    opacity: 0.85,
+    opacity: 0.82,
   },
   icon: {
-    color: colors.background,
+    color: '#0B0F0A',
     fontSize: 30,
     fontWeight: '400',
     lineHeight: 34,

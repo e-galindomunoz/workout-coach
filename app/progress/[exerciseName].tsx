@@ -30,7 +30,7 @@ import {
   getProgressionRecommendation,
 } from '../../lib/progression';
 import { getExerciseHistory, getProfile } from '../../lib/supabase';
-import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 import type { WorkoutInsightResponse } from '../../types/ai';
 import type { ExerciseLog } from '../../types/supabase';
 

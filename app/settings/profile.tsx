@@ -18,8 +18,8 @@ export default function EditProfileScreen() {
 
   return (
     <AppScreen
-      title="Edit fitness profile"
-      description="Update the same profile that powers onboarding and routing."
+      title="Edit Profile"
+      description="Update your training data and preferences."
       fillContent
       scrollEnabled={false}
     >

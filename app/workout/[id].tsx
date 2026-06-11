@@ -1,7 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -30,7 +30,7 @@ import {
   getExerciseLogsBySession,
   getWorkoutSessionById,
 } from '../../lib/supabase';
-import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 import { calculateTotalVolume, countWorkoutSets, groupExerciseLogs } from '../../lib/workouts';
 import type { WorkoutInsightResponse } from '../../types/ai';
 import type { ExerciseLog, PrHighlight, WorkoutSession } from '../../types/supabase';
@@ -44,7 +44,6 @@ export default function WorkoutSummaryScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Insight state
   const [insightModalVisible, setInsightModalVisible] = useState(false);
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightResult, setInsightResult] = useState<WorkoutInsightResponse | null>(null);
@@ -94,8 +93,7 @@ export default function WorkoutSummaryScreen() {
         const unique = flattened.filter(
           (highlight, index) =>
             flattened.findIndex(
-              (entry) =>
-                entry.exerciseName === highlight.exerciseName && entry.type === highlight.type,
+              (entry) => entry.exerciseName === highlight.exerciseName && entry.type === highlight.type,
             ) === index,
         );
         setPrHighlights(unique);
@@ -116,9 +114,7 @@ export default function WorkoutSummaryScreen() {
     setInsightError(null);
 
     try {
-      // Get shared context (profile, recent training, progressions) in parallel
       const ctx = await getCoachContext();
-
       const result = await getWorkoutInsight({
         mode: 'post_workout',
         completedWorkout: {
@@ -162,7 +158,7 @@ export default function WorkoutSummaryScreen() {
     if (!session) return;
     Alert.alert(
       'Delete workout?',
-      `Delete "${session.title}" and all its logged sets?`,
+      `Delete "${session.title}" and all its logged sets? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => void handleDeleteWorkout() },
@@ -184,7 +180,7 @@ export default function WorkoutSummaryScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Workout Summary',
+          title: 'Summary',
           headerRight: () =>
             session ? (
               <Pressable onPress={confirmDeleteWorkout}>
@@ -194,8 +190,12 @@ export default function WorkoutSummaryScreen() {
         }}
       />
       <AppScreen
-        title={session?.title ?? 'Workout Summary'}
-        description="A clean recap of this completed session."
+        title={session?.title ?? 'Workout'}
+        description={
+          session
+            ? `${formatDate(session.started_at)}${session.duration_minutes ? ` · ${session.duration_minutes} min` : ''}`
+            : 'Session summary'
+        }
       >
         {loading ? (
           <LoadingState message="Loading workout summary..." />
@@ -208,19 +208,32 @@ export default function WorkoutSummaryScreen() {
           />
         ) : (
           <View style={styles.content}>
+            {/* Stats grid */}
             <View style={styles.summaryGrid}>
-              <StatCard label="Duration" value={`${session.duration_minutes ?? 0} min`} />
-              <StatCard label="Exercises" value={`${groupedLogs.length}`} accent />
+              <StatCard
+                label="Duration"
+                value={`${session.duration_minutes ?? 0} min`}
+                style={styles.statHalf}
+              />
+              <StatCard
+                label="Exercises"
+                value={`${groupedLogs.length}`}
+                accent
+                style={styles.statHalf}
+              />
               <StatCard
                 label="Total sets"
                 value={`${countWorkoutSets(groupedLogs.map((group) => ({ sets: group.logs })))}`}
+                style={styles.statHalf}
               />
               <StatCard
                 label="Total volume"
                 value={totalVolume > 0 ? `${Math.round(totalVolume)} lb` : 'N/A'}
+                style={styles.statHalf}
               />
             </View>
 
+            {/* PRs */}
             {prHighlights.length > 0 ? (
               <GlassCard style={styles.prSection}>
                 <SectionHeader
@@ -237,65 +250,70 @@ export default function WorkoutSummaryScreen() {
                       <Text style={styles.prExercise}>{highlight.exerciseName}</Text>
                     </View>
                     <Text style={styles.prLabel}>{highlight.label}</Text>
-                    <Text style={styles.prValues}>
-                      {highlight.previousValue} → {highlight.currentValue}
-                    </Text>
+                    <View style={styles.prValueRow}>
+                      {highlight.previousValue ? (
+                        <Text style={styles.prPrevious}>{highlight.previousValue}</Text>
+                      ) : null}
+                      {highlight.previousValue ? (
+                        <Ionicons name="arrow-forward" size={14} color={colors.accentPR} />
+                      ) : null}
+                      <Text style={styles.prCurrent}>{highlight.currentValue}</Text>
+                    </View>
                   </View>
                 ))}
               </GlassCard>
             ) : (
-              <Card accent>
-                <SectionHeader title="PRs" subtitle="No new personal bests this session." />
-                <EmptyState
-                  title="No new PRs"
-                  description="Keep stacking clean work. The next PR will show up here."
-                />
+              <Card>
+                <SectionHeader title="Personal Records" subtitle="No new PRs this session." />
+                <Text style={styles.noPrText}>
+                  Keep stacking clean reps. Your next PR is coming.
+                </Text>
               </Card>
             )}
 
             {/* AI Coach Insight */}
-            <Card style={styles.insightCard}>
-              <SectionHeader
-                title="Coach Insight"
-                subtitle="AI analysis of this session using your recent logs + PRs."
-              />
+            <GlassCard style={styles.insightCard}>
+              <View style={styles.insightCardHeader}>
+                <View style={styles.insightAvatar}>
+                  <Ionicons name="chatbubble-ellipses" size={16} color={colors.accent} />
+                </View>
+                <View style={styles.insightMeta}>
+                  <Text style={styles.insightTitle}>Coach Insight</Text>
+                  <Text style={styles.insightSubtitle}>
+                    AI analysis using your logs + PRs
+                  </Text>
+                </View>
+              </View>
               {insightError ? (
-                <>
-                  <Text style={styles.insightError}>{insightError}</Text>
-                  <Button
-                    label="Try Again"
-                    onPress={() => void handleGetInsight()}
-                    variant="secondary"
-                  />
-                </>
+                <ErrorState message={insightError} onRetry={() => void handleGetInsight()} />
               ) : null}
               <Button
                 label={
                   insightLoading
                     ? 'Analyzing...'
                     : insightResult
-                      ? 'View Insight'
-                      : 'Get Coach Insight'
+                    ? 'View Insight'
+                    : 'Get Coach Insight'
                 }
                 loading={insightLoading}
-                onPress={
-                  insightResult ? () => setInsightModalVisible(true) : () => void handleGetInsight()
-                }
-                variant="secondary"
+                onPress={insightResult ? () => setInsightModalVisible(true) : () => void handleGetInsight()}
+                variant="glass"
               />
-            </Card>
+            </GlassCard>
 
+            {/* Session notes */}
             {session.notes ? (
               <Card>
-                <SectionHeader title="Session notes" />
+                <SectionHeader title="Session Notes" />
                 <Text style={styles.notesText}>{session.notes}</Text>
               </Card>
             ) : null}
 
+            {/* Exercises logged */}
             <Card>
               <SectionHeader
-                title="Exercises logged"
-                subtitle="Every set from this workout."
+                title="Exercises Logged"
+                subtitle={`${groupedLogs.length} exercise${groupedLogs.length !== 1 ? 's' : ''}`}
               />
               {groupedLogs.map((group) => (
                 <View key={group.exerciseName} style={styles.exerciseCard}>
@@ -303,8 +321,14 @@ export default function WorkoutSummaryScreen() {
                   {group.logs.map((log) => (
                     <View key={log.id} style={styles.setRow}>
                       <Text style={styles.setText}>
-                        Set {log.set_number}: {log.weight ?? 'BW'} lb × {log.reps ?? '-'} reps
-                        {typeof log.rpe === 'number' ? ` · RPE ${log.rpe}` : ''}
+                        Set {log.set_number}
+                        {'  '}
+                        <Text style={styles.setValueText}>
+                          {log.weight ?? 'BW'} lb × {log.reps ?? '-'} reps
+                        </Text>
+                        {typeof log.rpe === 'number' ? (
+                          <Text style={styles.setMetaText}> · RPE {log.rpe}</Text>
+                        ) : null}
                       </Text>
                       {log.pain_flag ? <Pill label="Pain flagged" tone="danger" /> : null}
                       {log.notes ? <Text style={styles.setNote}>{log.notes}</Text> : null}
@@ -339,11 +363,12 @@ export default function WorkoutSummaryScreen() {
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.modalTitle}>Coach Insight</Text>
-              <Text style={styles.modalSubtitle}>Using your recent logs + PRs</Text>
+              <Text style={styles.modalSubtitle}>USING YOUR LOGS + PRs</Text>
 
               {insightResult?.safetyNote ? (
                 <View style={styles.safetyBanner}>
-                  <Text style={styles.safetyBannerText}>⚠ {insightResult.safetyNote}</Text>
+                  <Ionicons name="warning-outline" size={16} color={colors.danger} />
+                  <Text style={styles.safetyBannerText}>{insightResult.safetyNote}</Text>
                 </View>
               ) : null}
 
@@ -356,7 +381,7 @@ export default function WorkoutSummaryScreen() {
                       <Text style={styles.insightSectionLabel}>KEY WINS</Text>
                       {insightResult.wins.map((win, i) => (
                         <View key={i} style={styles.winRow}>
-                          <Text style={styles.winBullet}>✓</Text>
+                          <Ionicons name="checkmark-circle" size={16} color={colors.accent} />
                           <Text style={styles.winText}>{win}</Text>
                         </View>
                       ))}
@@ -365,7 +390,7 @@ export default function WorkoutSummaryScreen() {
 
                   {insightResult.nextFocus ? (
                     <View style={styles.insightSection}>
-                      <Text style={styles.insightSectionLabel}>NEXT FOCUS</Text>
+                      <Text style={styles.insightSectionLabel}>NEXT SESSION FOCUS</Text>
                       <Text style={styles.nextFocusText}>{insightResult.nextFocus}</Text>
                     </View>
                   ) : null}
@@ -385,11 +410,7 @@ export default function WorkoutSummaryScreen() {
                 </>
               ) : null}
 
-              <Button
-                label="Close"
-                onPress={() => setInsightModalVisible(false)}
-                variant="secondary"
-              />
+              <Button label="Close" onPress={() => setInsightModalVisible(false)} variant="secondary" />
             </ScrollView>
           </View>
         </View>
@@ -398,27 +419,43 @@ export default function WorkoutSummaryScreen() {
   );
 }
 
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value));
+}
+
 const styles = StyleSheet.create({
   headerDelete: {
     color: colors.danger,
     fontSize: fontSizes.md,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
   content: {
     gap: spacing.lg,
     paddingBottom: spacing.xxl,
   },
+
+  // Stats grid
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
   },
+  statHalf: {
+    flexBasis: '47%',
+    flexGrow: 1,
+  },
+
+  // PRs
   prSection: {
     gap: spacing.md,
   },
   prCard: {
     backgroundColor: 'rgba(199, 232, 107, 0.06)',
-    borderColor: 'rgba(199, 232, 107, 0.20)',
+    borderColor: 'rgba(199, 232, 107, 0.22)',
     borderRadius: radius.md,
     borderWidth: 1,
     gap: spacing.sm,
@@ -427,38 +464,81 @@ const styles = StyleSheet.create({
   prCardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: spacing.sm,
   },
   prExercise: {
     color: colors.text,
     fontSize: fontSizes.lg,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
   prLabel: {
     color: colors.textMuted,
     fontSize: fontSizes.sm,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
   },
-  prValues: {
+  prValueRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  prPrevious: {
+    color: colors.textSoft,
+    fontSize: fontSizes.md,
+    textDecorationLine: 'line-through',
+  },
+  prCurrent: {
     color: colors.accentPR,
     fontSize: fontSizes.xl,
-    fontWeight: '800',
-    lineHeight: 28,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.2,
   },
+  noPrText: {
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
+    lineHeight: 22,
+  },
+
+  // Insight card
   insightCard: {
     gap: spacing.md,
   },
-  insightError: {
-    color: colors.danger,
-    fontSize: fontSizes.sm,
-    lineHeight: 18,
+  insightCardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
   },
+  insightAvatar: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAccent,
+    borderColor: colors.accentBorder,
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  insightMeta: {
+    flex: 1,
+    gap: 3,
+  },
+  insightTitle: {
+    color: colors.text,
+    fontSize: fontSizes.lg,
+    fontWeight: fontWeights.heavy,
+  },
+  insightSubtitle: {
+    color: colors.textSoft,
+    fontSize: fontSizes.sm,
+  },
+
+  // Notes
   notesText: {
     color: colors.textMuted,
     fontSize: fontSizes.md,
     lineHeight: 22,
   },
+
+  // Exercises logged
   exerciseCard: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.border,
@@ -471,15 +551,23 @@ const styles = StyleSheet.create({
   exerciseTitle: {
     color: colors.text,
     fontSize: fontSizes.xl,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.2,
   },
   setRow: {
-    gap: 5,
+    gap: 4,
   },
   setText: {
-    color: colors.textMuted,
+    color: colors.textSoft,
     fontSize: fontSizes.md,
     lineHeight: 20,
+  },
+  setValueText: {
+    color: colors.text,
+    fontWeight: fontWeights.bold,
+  },
+  setMetaText: {
+    color: colors.textSoft,
   },
   setNote: {
     color: colors.textSoft,
@@ -489,7 +577,7 @@ const styles = StyleSheet.create({
 
   // Modal
   modalOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     flex: 1,
     justifyContent: 'flex-end',
   },
@@ -500,7 +588,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundElevated,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '85%',
+    maxHeight: '88%',
     paddingTop: spacing.md,
   },
   modalHandle: {
@@ -519,28 +607,32 @@ const styles = StyleSheet.create({
   modalTitle: {
     color: colors.text,
     fontSize: fontSizes.xxl,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     letterSpacing: -0.4,
   },
   modalSubtitle: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 1.4,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 1.8,
     marginTop: -spacing.sm,
     textTransform: 'uppercase',
   },
   safetyBanner: {
+    alignItems: 'flex-start',
     backgroundColor: colors.dangerSurface,
-    borderColor: colors.danger,
+    borderColor: 'rgba(224, 108, 117, 0.35)',
     borderRadius: radius.sm,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
     padding: spacing.md,
   },
   safetyBannerText: {
     color: colors.danger,
+    flex: 1,
     fontSize: fontSizes.sm,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     lineHeight: 20,
   },
   insightSummary: {
@@ -554,20 +646,14 @@ const styles = StyleSheet.create({
   insightSectionLabel: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 1.4,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 1.8,
     textTransform: 'uppercase',
   },
   winRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: spacing.sm,
-  },
-  winBullet: {
-    color: colors.accent,
-    fontSize: fontSizes.md,
-    fontWeight: '800',
-    lineHeight: 22,
   },
   winText: {
     color: colors.textMuted,
@@ -578,12 +664,12 @@ const styles = StyleSheet.create({
   nextFocusText: {
     color: colors.text,
     fontSize: fontSizes.lg,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
     lineHeight: 24,
   },
   targetCard: {
     backgroundColor: colors.surfaceAccent,
-    borderColor: colors.borderAccent,
+    borderColor: colors.accentBorder,
     borderRadius: radius.md,
     borderWidth: 1,
     gap: spacing.xs,
@@ -592,12 +678,13 @@ const styles = StyleSheet.create({
   targetExercise: {
     color: colors.text,
     fontSize: fontSizes.md,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
   targetValue: {
     color: colors.accent,
     fontSize: fontSizes.xl,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.2,
   },
   targetReason: {
     color: colors.textMuted,

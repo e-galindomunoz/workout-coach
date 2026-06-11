@@ -8,7 +8,7 @@ import { ErrorState } from './ui/ErrorState';
 import { Input } from './ui/Input';
 import { Pill } from './ui/Pill';
 import { createProfile, isSupabaseConfigured, supabase, supabaseConfigError } from '../lib/supabase';
-import { colors, fontSizes, spacing } from '../lib/theme';
+import { colors, fontSizes, fontWeights, spacing } from '../lib/theme';
 
 type AuthFormProps = {
   mode: 'login' | 'signup';
@@ -102,11 +102,11 @@ export function AuthForm({
           return;
         }
 
-        setMessage('Account created. Redirecting to the app...');
+        setMessage('Account created. Redirecting...');
         return;
       }
 
-      setMessage('Account created. Check your email to confirm your account, then log in.');
+      setMessage('Account created. Check your email to confirm, then log in.');
     } finally {
       setLoading(false);
     }
@@ -122,11 +122,8 @@ export function AuthForm({
           <Pill label={mode === 'login' ? 'Welcome back' : 'New account'} tone="accent" />
           <Text style={styles.heroTitle}>
             {mode === 'login'
-              ? 'Open your training history and pick up where you left off.'
-              : 'Create the account that will hold your workouts, PRs, and progression.'}
-          </Text>
-          <Text style={styles.heroText}>
-            Phase 1 is fully manual and deterministic. Your data stays clean and drives every stat in the app.
+              ? 'Your training history, PRs, and progression are waiting for you.'
+              : 'Build your training history. Track every lift. Beat every record.'}
           </Text>
         </Card>
 
@@ -174,13 +171,13 @@ export function AuthForm({
           {error ? <ErrorState message={error} /> : null}
           {message ? (
             <View style={styles.messageCard}>
-              <Pill label="Success" tone="success" />
+              <Pill label="Done" tone="success" />
               <Text style={styles.messageText}>{message}</Text>
             </View>
           ) : null}
 
           <Button
-            label={mode === 'login' ? 'Log in' : 'Create account'}
+            label={mode === 'login' ? 'Log In' : 'Create Account'}
             loading={loading}
             onPress={() => void handleSubmit()}
           />
@@ -203,14 +200,9 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: colors.text,
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: fontWeights.heavy,
     lineHeight: 30,
-  },
-  heroText: {
-    color: colors.textMuted,
-    fontSize: fontSizes.md,
-    lineHeight: 22,
   },
   formCard: {
     gap: spacing.lg,
@@ -226,7 +218,7 @@ const styles = StyleSheet.create({
   secondaryLink: {
     color: colors.accent,
     fontSize: fontSizes.md,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
     paddingBottom: spacing.sm,
     textAlign: 'center',
   },

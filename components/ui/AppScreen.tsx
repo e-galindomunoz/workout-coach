@@ -9,11 +9,11 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { colors, fontSizes, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, spacing } from '../../lib/theme';
 
 type AppScreenProps = PropsWithChildren<{
   title: string;
-  description: string;
+  description?: string;
   scrollEnabled?: boolean;
   fillContent?: boolean;
   refreshing?: boolean;
@@ -37,13 +37,13 @@ export function AppScreen({
 }: AppScreenProps) {
   const content = (
     <View style={styles.container}>
-      <View style={styles.headerCluster}>
+      <View style={[styles.headerCluster, headerAccessory ? styles.headerClusterRow : undefined]}>
         <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>Phase 1</Text>
+          <Text style={styles.eyebrow}>IRONLINE</Text>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.description}>{description}</Text>
+          {description ? <Text style={styles.description}>{description}</Text> : null}
         </View>
-        {headerAccessory ? <View>{headerAccessory}</View> : null}
+        {headerAccessory ? <View style={styles.headerAccessory}>{headerAccessory}</View> : null}
       </View>
 
       <View style={[styles.content, fillContent && styles.contentFill, contentContainerStyle]}>
@@ -98,30 +98,39 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl,
   },
   headerCluster: {
-    gap: spacing.md,
+    gap: spacing.sm,
+  },
+  headerClusterRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   headerText: {
-    gap: spacing.xs,
+    flex: 1,
+    gap: 4,
+  },
+  headerAccessory: {
+    paddingTop: spacing.sm,
   },
   eyebrow: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 1.8,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 2.4,
     textTransform: 'uppercase',
   },
   title: {
     color: colors.text,
     fontSize: fontSizes.hero,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     letterSpacing: -0.8,
   },
   description: {
     color: colors.textSoft,
     fontSize: fontSizes.md,
     lineHeight: 22,
-    maxWidth: 460,
     marginTop: 2,
+    maxWidth: 460,
   },
   content: {
     gap: spacing.lg,
@@ -133,21 +142,21 @@ const styles = StyleSheet.create({
   backgroundOrbPrimary: {
     backgroundColor: '#2A3B18',
     borderRadius: 200,
-    height: 240,
-    opacity: 0.16,
+    height: 280,
+    opacity: 0.18,
     position: 'absolute',
     right: -80,
     top: -60,
-    width: 240,
+    width: 280,
   },
   backgroundOrbSecondary: {
     backgroundColor: '#1A2810',
-    borderRadius: 260,
-    bottom: -140,
-    height: 280,
-    left: -100,
-    opacity: 0.28,
+    borderRadius: 280,
+    bottom: -160,
+    height: 320,
+    left: -120,
+    opacity: 0.32,
     position: 'absolute',
-    width: 280,
+    width: 320,
   },
 });

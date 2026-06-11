@@ -160,12 +160,12 @@ export default function CoachScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerEyebrow}>Phase 1</Text>
+          <Text style={styles.headerEyebrow}>IRONLINE</Text>
           <Text style={styles.headerTitle}>Coach</Text>
         </View>
         {hasMessages && (
           <Pressable onPress={confirmClear} style={styles.clearButton}>
-            <Text style={styles.clearButtonText}>Clear</Text>
+            <Text style={styles.clearButtonText}>Clear history</Text>
           </Pressable>
         )}
       </View>
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: fontSizes.xs,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
   bubbleText: {

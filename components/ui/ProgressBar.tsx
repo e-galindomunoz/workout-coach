@@ -1,21 +1,37 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { colors, radius } from '../../lib/theme';
 
 type ProgressBarProps = {
   value: number;
-  accent?: boolean;
+  tone?: 'accent' | 'pr' | 'success' | 'warning' | 'danger';
+  height?: number;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function ProgressBar({ value, accent = false }: ProgressBarProps) {
-  const clamped = Math.max(0, Math.min(100, value));
+export function ProgressBar({ value, tone = 'accent', height = 6, style }: ProgressBarProps) {
+  const clampedValue = Math.min(100, Math.max(0, value));
+
+  const fillColor =
+    tone === 'pr'
+      ? colors.accentPR
+      : tone === 'success'
+      ? colors.success
+      : tone === 'warning'
+      ? colors.warning
+      : tone === 'danger'
+      ? colors.danger
+      : colors.accent;
 
   return (
-    <View style={styles.track}>
+    <View style={[styles.track, { height }, style]}>
       <View
         style={[
           styles.fill,
-          accent && styles.fillAccent,
-          { width: `${clamped}%` },
+          {
+            backgroundColor: fillColor,
+            height,
+            width: `${clampedValue}%`,
+          },
         ]}
       />
     </View>
@@ -24,17 +40,12 @@ export function ProgressBar({ value, accent = false }: ProgressBarProps) {
 
 const styles = StyleSheet.create({
   track: {
-    backgroundColor: 'rgba(143, 175, 90, 0.10)',
+    backgroundColor: 'rgba(163, 190, 98, 0.10)',
     borderRadius: radius.pill,
-    height: 8,
     overflow: 'hidden',
+    width: '100%',
   },
   fill: {
-    backgroundColor: colors.accent,
     borderRadius: radius.pill,
-    height: '100%',
-  },
-  fillAccent: {
-    backgroundColor: colors.accentPR,
   },
 });

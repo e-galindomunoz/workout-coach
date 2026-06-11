@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -36,7 +37,7 @@ import {
   getExerciseHistory,
   upsertExerciseToCatalog,
 } from '../../lib/supabase';
-import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 import type { AdjustWorkoutResponse, WorkoutPatch } from '../../types/ai';
 import {
   calculateDurationMinutes,
@@ -80,7 +81,6 @@ export default function NewWorkoutScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Coach adjustment state
   type AdjustStep = 'input' | 'loading' | 'result';
   const [adjustModalVisible, setAdjustModalVisible] = useState(false);
   const [adjustStep, setAdjustStep] = useState<AdjustStep>('input');
@@ -93,55 +93,32 @@ export default function NewWorkoutScreen() {
       setCatalogLoading(true);
       const result = await getExerciseCatalog();
       setCatalogLoading(false);
-
       if (result.error) {
         setCatalogError(result.error.message);
         setCatalog([]);
         return;
       }
-
       setCatalogError(null);
       setCatalog(result.data ?? []);
     }
-
     void loadCatalog();
   }, []);
 
   useEffect(() => {
     const names = Array.from(
-      new Set(
-        workout.exercises
-          .map((exercise) => exercise.exerciseName.trim())
-          .filter(Boolean),
-      ),
+      new Set(workout.exercises.map((e) => e.exerciseName.trim()).filter(Boolean)),
     );
 
     names.forEach((name) => {
       const key = normalizeExerciseName(name);
+      if (historyByExercise[key] || historyLoading[key]) return;
 
-      if (historyByExercise[key] || historyLoading[key]) {
-        return;
-      }
-
-      setHistoryLoading((current) => ({
-        ...current,
-        [key]: true,
-      }));
+      setHistoryLoading((current) => ({ ...current, [key]: true }));
 
       void getExerciseHistory(name, 40).then((result) => {
-        setHistoryLoading((current) => ({
-          ...current,
-          [key]: false,
-        }));
-
-        if (result.error) {
-          return;
-        }
-
-        setHistoryByExercise((current) => ({
-          ...current,
-          [key]: result.data ?? [],
-        }));
+        setHistoryLoading((current) => ({ ...current, [key]: false }));
+        if (result.error) return;
+        setHistoryByExercise((current) => ({ ...current, [key]: result.data ?? [] }));
       });
     });
   }, [historyByExercise, historyLoading, workout.exercises]);
@@ -152,19 +129,14 @@ export default function NewWorkoutScreen() {
   );
 
   const filteredPresets = useMemo(() => {
-    const activeNames = new Set(
-      workout.exercises.map((e) => e.exerciseName.trim().toLowerCase()),
-    );
+    const activeNames = new Set(workout.exercises.map((e) => e.exerciseName.trim().toLowerCase()));
     return searchPresets(exerciseSearch, exerciseFilter).filter(
       (p) => !activeNames.has(p.name.toLowerCase()),
     );
   }, [exerciseSearch, exerciseFilter, workout.exercises]);
 
   function updateWorkout<K extends keyof ActiveWorkout>(key: K, value: ActiveWorkout[K]) {
-    setWorkout((current) => ({
-      ...current,
-      [key]: value,
-    }));
+    setWorkout((current) => ({ ...current, [key]: value }));
   }
 
   function updateExercise(exerciseId: string, updater: (exercise: ActiveExercise) => ActiveExercise) {
@@ -176,11 +148,7 @@ export default function NewWorkoutScreen() {
     }));
   }
 
-  function updateSet(
-    exerciseId: string,
-    setId: string,
-    updater: (set: ActiveSet) => ActiveSet,
-  ) {
+  function updateSet(exerciseId: string, setId: string, updater: (set: ActiveSet) => ActiveSet) {
     updateExercise(exerciseId, (exercise) => ({
       ...exercise,
       sets: exercise.sets.map((set) => (set.id === setId ? updater(set) : set)),
@@ -193,18 +161,13 @@ export default function NewWorkoutScreen() {
       setError('Exercise name is required.');
       return;
     }
-
     setWorkout((current) => ({
       ...current,
       exercises: [
         ...current.exercises,
-        createEmptyExercise({
-          exerciseName: name,
-          muscleGroup: newExerciseMuscleGroup.trim(),
-        }),
+        createEmptyExercise({ exerciseName: name, muscleGroup: newExerciseMuscleGroup.trim() }),
       ],
     }));
-
     setNewExerciseName('');
     setNewExerciseMuscleGroup('');
     setShowCustomInput(false);
@@ -232,10 +195,7 @@ export default function NewWorkoutScreen() {
       ...current,
       exercises: [
         ...current.exercises,
-        createEmptyExercise({
-          exerciseName: preset.name,
-          muscleGroup: preset.muscleGroup,
-        }),
+        createEmptyExercise({ exerciseName: preset.name, muscleGroup: preset.muscleGroup }),
       ],
     }));
     setExerciseSearch('');
@@ -243,29 +203,20 @@ export default function NewWorkoutScreen() {
     setError(null);
   }
 
-  function applyRecommendation(
-    exerciseId: string,
-    recommendation: ProgressionRecommendation,
-  ) {
+  function applyRecommendation(exerciseId: string, recommendation: ProgressionRecommendation) {
     updateExercise(exerciseId, (current) => {
       const firstSet = current.sets[0];
-
-      if (!firstSet) {
-        return current;
-      }
-
+      if (!firstSet) return current;
       const targetReps = recommendation.recommendedRepTarget.split('-')[0]?.trim() ?? '';
-
       return {
         ...current,
         sets: current.sets.map((set, index) =>
           index === 0
             ? {
                 ...set,
-                weight:
-                  recommendation.recommendedNextWeight !== null
-                    ? String(recommendation.recommendedNextWeight)
-                    : set.weight,
+                weight: recommendation.recommendedNextWeight !== null
+                  ? String(recommendation.recommendedNextWeight)
+                  : set.weight,
                 reps: targetReps || set.reps,
               }
             : set,
@@ -290,7 +241,6 @@ export default function NewWorkoutScreen() {
 
     try {
       const ctx = await getCoachContext();
-
       const result = await requestWorkoutAdjustment({
         request: req,
         currentWorkout: {
@@ -346,12 +296,7 @@ export default function NewWorkoutScreen() {
       }
 
       for (const add of patch.addExercises ?? []) {
-        exercises.push(
-          createEmptyExercise({
-            exerciseName: add.name,
-            muscleGroup: add.muscleGroup ?? '',
-          }),
-        );
+        exercises.push(createEmptyExercise({ exerciseName: add.name, muscleGroup: add.muscleGroup ?? '' }));
       }
 
       return { ...current, exercises };
@@ -408,7 +353,7 @@ export default function NewWorkoutScreen() {
         if (set.rpe.trim()) {
           const rpe = Number(set.rpe);
           if (!(rpe >= 0 && rpe <= 10)) {
-            setError(`RPE must be between 0 and 10 for ${exercise.exerciseName}.`);
+            setError(`RPE must be 0–10 for ${exercise.exerciseName}.`);
             return;
           }
         }
@@ -481,26 +426,24 @@ export default function NewWorkoutScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: 'Start Workout',
-          gestureEnabled: false,
-        }}
-      />
+      <Stack.Screen options={{ title: 'New Workout', gestureEnabled: false }} />
       <AppScreen
-        title="Start Workout"
-        description="Log your session, use history to guide your sets, then save when done."
+        title="Workout"
         fillContent
         scrollEnabled={false}
-        headerAccessory={<Button label="Discard" onPress={confirmDiscard} variant="ghost" />}
+        headerAccessory={
+          <Button label="Discard" onPress={confirmDiscard} variant="ghost" size="sm" />
+        }
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.flex}
         >
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+
+            {/* Workout details */}
             <Card accent>
-              <SectionHeader title="Workout details" subtitle="Name and context for today's session." />
+              <SectionHeader title="Session Details" />
               <Input
                 label="Workout title"
                 onChangeText={(value) => updateWorkout('title', value)}
@@ -510,21 +453,21 @@ export default function NewWorkoutScreen() {
               <Input
                 label="Type (optional)"
                 onChangeText={(value) => updateWorkout('workoutType', value)}
-                placeholder="Strength, hypertrophy, conditioning"
+                placeholder="Strength, hypertrophy, conditioning..."
                 value={workout.workoutType}
               />
               <Input
                 label="Notes (optional)"
                 multiline
                 onChangeText={(value) => updateWorkout('notes', value)}
-                placeholder="How you're feeling, focus for today"
+                placeholder="How you're feeling, focus for today..."
                 value={workout.notes}
               />
             </Card>
 
+            {/* Add exercise */}
             <Card>
-              <SectionHeader title="Add exercise" subtitle="Filter by muscle group or search." />
-
+              <SectionHeader title="Add Exercise" subtitle="Filter by muscle group or search." />
               <Input
                 label="Search exercises"
                 onChangeText={setExerciseSearch}
@@ -555,13 +498,10 @@ export default function NewWorkoutScreen() {
 
               <Text style={styles.sectionHint}>Exercise library</Text>
               {filteredPresets.length === 0 ? (
-                <Text style={styles.emptyText}>No exercises match.</Text>
+                <Text style={styles.emptyText}>No exercises match your search.</Text>
               ) : (
                 <>
-                  {(exerciseSearch || exerciseFilter
-                    ? filteredPresets
-                    : filteredPresets.slice(0, 12)
-                  ).map((preset) => (
+                  {(exerciseSearch || exerciseFilter ? filteredPresets : filteredPresets.slice(0, 12)).map((preset) => (
                     <Pressable
                       key={preset.name}
                       onPress={() => addExerciseFromPreset(preset)}
@@ -592,10 +532,7 @@ export default function NewWorkoutScreen() {
                       <Pressable
                         key={item.id}
                         onPress={() => addExerciseFromCatalog(item)}
-                        style={({ pressed }) => [
-                          styles.suggestionChip,
-                          pressed && styles.buttonPressed,
-                        ]}
+                        style={({ pressed }) => [styles.suggestionChip, pressed && styles.buttonPressed]}
                       >
                         <Text style={styles.suggestionText}>{item.name}</Text>
                       </Pressable>
@@ -633,13 +570,14 @@ export default function NewWorkoutScreen() {
               )}
             </Card>
 
+            {/* Exercise list */}
             <Card>
               <SectionHeader
                 title="Exercises"
-                subtitle={`${workout.exercises.length} added · history and targets shown per lift`}
+                subtitle={`${workout.exercises.length} added`}
               />
               {workout.exercises.length === 0 ? (
-                <Text style={styles.emptyText}>No exercises added yet.</Text>
+                <Text style={styles.emptyText}>No exercises added yet. Use the library above.</Text>
               ) : (
                 workout.exercises.map((exercise, exerciseIndex) => {
                   const historyKey = normalizeExerciseName(exercise.exerciseName);
@@ -650,32 +588,48 @@ export default function NewWorkoutScreen() {
                     exercise.exerciseName.trim().length > 0
                       ? getProgressionRecommendation(exercise.exerciseName.trim(), history)
                       : null;
-
                   const preset = PRESET_BY_NAME.get(exercise.exerciseName.trim().toLowerCase());
 
                   return (
                     <View key={exercise.id} style={styles.exerciseCard}>
-                      <Card accent={Boolean(recommendation && recommendation.recommendationType !== 'not_enough_data')} style={styles.exerciseInsightCard}>
-                        <SectionHeader
-                          title={exercise.exerciseName || `Exercise ${exerciseIndex + 1}`}
-                          subtitle="Previous best and next target"
-                        />
+                      {/* Insight / recommendation card */}
+                      <Card
+                        accent={Boolean(recommendation && recommendation.recommendationType !== 'not_enough_data')}
+                        style={styles.exerciseInsightCard}
+                      >
+                        <View style={styles.exerciseTitleRow}>
+                          <Text style={styles.exerciseTitle}>
+                            {exercise.exerciseName || `Exercise ${exerciseIndex + 1}`}
+                          </Text>
+                          <Pressable
+                            onPress={() =>
+                              updateWorkout(
+                                'exercises',
+                                workout.exercises.filter((item) => item.id !== exercise.id),
+                              )
+                            }
+                            style={({ pressed }) => [styles.removeButton, pressed && styles.buttonPressed]}
+                            hitSlop={6}
+                          >
+                            <Ionicons name="close" size={16} color={colors.textSoft} />
+                          </Pressable>
+                        </View>
+
                         {loadingHistory ? (
                           <View style={styles.inlineLoadingRow}>
                             <ActivityIndicator color={colors.accent} size="small" />
-                            <Text style={styles.exerciseInsightText}>Loading history...</Text>
+                            <Text style={styles.exerciseInsightMuted}>Loading history...</Text>
                           </View>
                         ) : !exercise.exerciseName.trim() ? (
-                          <Text style={styles.exerciseInsightText}>
-                            Name this exercise to see previous bests and a next target.
+                          <Text style={styles.exerciseInsightMuted}>
+                            Name this exercise to see previous bests.
                           </Text>
                         ) : history.length === 0 || !personalBest || !recommendation ? (
                           <>
-                            <Text style={styles.exerciseInsightText}>No history yet.</Text>
                             {preset ? (
                               <>
                                 <Text style={styles.exerciseInsightTarget}>
-                                  Recommended: {preset.sets} × {preset.reps}
+                                  Start: {preset.sets} × {preset.reps}
                                 </Text>
                                 <Text style={styles.exerciseInsightMuted}>
                                   Targets: {preset.primaryMuscles.join(', ')}
@@ -683,7 +637,7 @@ export default function NewWorkoutScreen() {
                               </>
                             ) : (
                               <Text style={styles.exerciseInsightMuted}>
-                                Start conservatively and use this session to set a baseline.
+                                No history yet. Start conservatively to set a baseline.
                               </Text>
                             )}
                           </>
@@ -699,77 +653,56 @@ export default function NewWorkoutScreen() {
                             <Text style={styles.exerciseInsightMuted}>{recommendation.reason}</Text>
                             {recommendation.recommendationType !== 'not_enough_data' ? (
                               <Button
-                                label="Apply to first set"
+                                label="Apply Target to First Set"
                                 onPress={() => applyRecommendation(exercise.id, recommendation)}
                                 variant="secondary"
+                                size="sm"
                               />
                             ) : null}
                           </>
                         )}
                       </Card>
 
-                      <View style={styles.exerciseRow}>
-                        <Text style={styles.exerciseLabel}>Exercise setup</Text>
-                        <Button
-                          label="Remove"
-                          onPress={() =>
-                            updateWorkout(
-                              'exercises',
-                              workout.exercises.filter((item) => item.id !== exercise.id),
-                            )
+                      {/* Exercise fields */}
+                      <View style={styles.exerciseFields}>
+                        <Input
+                          label="Exercise name"
+                          onChangeText={(value) =>
+                            updateExercise(exercise.id, (current) => ({ ...current, exerciseName: value }))
                           }
-                          variant="ghost"
+                          placeholder="Exercise name"
+                          value={exercise.exerciseName}
+                        />
+                        <Input
+                          label="Muscle group (optional)"
+                          onChangeText={(value) =>
+                            updateExercise(exercise.id, (current) => ({ ...current, muscleGroup: value }))
+                          }
+                          placeholder="Back"
+                          value={exercise.muscleGroup}
+                        />
+                        <Input
+                          label="Exercise notes (optional)"
+                          multiline
+                          onChangeText={(value) =>
+                            updateExercise(exercise.id, (current) => ({ ...current, notes: value }))
+                          }
+                          placeholder="Tempo, setup, cues..."
+                          value={exercise.notes}
                         />
                       </View>
 
-                      <Input
-                        label="Exercise name"
-                        onChangeText={(value) =>
-                          updateExercise(exercise.id, (current) => ({
-                            ...current,
-                            exerciseName: value,
-                          }))
-                        }
-                        placeholder="Exercise name"
-                        value={exercise.exerciseName}
-                      />
-                      <Input
-                        label="Muscle group (optional)"
-                        onChangeText={(value) =>
-                          updateExercise(exercise.id, (current) => ({
-                            ...current,
-                            muscleGroup: value,
-                          }))
-                        }
-                        placeholder="Back"
-                        value={exercise.muscleGroup}
-                      />
-                      <Input
-                        label="Exercise notes (optional)"
-                        multiline
-                        onChangeText={(value) =>
-                          updateExercise(exercise.id, (current) => ({
-                            ...current,
-                            notes: value,
-                          }))
-                        }
-                        placeholder="Tempo, setup, cues"
-                        value={exercise.notes}
-                      />
-
+                      {/* Set rows */}
                       {exercise.sets.map((set, setIndex) => (
                         <Card key={set.id} style={styles.setCard}>
                           <View style={styles.setHeader}>
                             <Text style={styles.setTitle}>Set {setIndex + 1}</Text>
-                            <View style={styles.rowActions}>
+                            <View style={styles.setHeaderActions}>
                               <Pressable
                                 onPress={() =>
                                   updateExercise(exercise.id, (current) => {
                                     const currentSet = current.sets.find((item) => item.id === set.id);
-                                    if (!currentSet) {
-                                      return current;
-                                    }
-
+                                    if (!currentSet) return current;
                                     return {
                                       ...current,
                                       sets: [
@@ -782,8 +715,10 @@ export default function NewWorkoutScreen() {
                                     };
                                   })
                                 }
+                                style={({ pressed }) => [styles.setActionChip, pressed && styles.buttonPressed]}
                               >
-                                <Text style={styles.inlineLink}>Duplicate</Text>
+                                <Ionicons name="copy-outline" size={13} color={colors.accent} />
+                                <Text style={styles.setActionChipText}>Dup</Text>
                               </Pressable>
                               <Pressable
                                 onPress={() =>
@@ -795,8 +730,10 @@ export default function NewWorkoutScreen() {
                                         : current.sets.filter((item) => item.id !== set.id),
                                   }))
                                 }
+                                style={({ pressed }) => [styles.setActionChipDanger, pressed && styles.buttonPressed]}
                               >
-                                <Text style={styles.inlineDangerLink}>Remove</Text>
+                                <Ionicons name="trash-outline" size={13} color={colors.danger} />
+                                <Text style={styles.setActionChipDangerText}>Del</Text>
                               </Pressable>
                             </View>
                           </View>
@@ -806,10 +743,7 @@ export default function NewWorkoutScreen() {
                               keyboardType="decimal-pad"
                               label="Weight (lb)"
                               onChangeText={(value) =>
-                                updateSet(exercise.id, set.id, (current) => ({
-                                  ...current,
-                                  weight: value,
-                                }))
+                                updateSet(exercise.id, set.id, (current) => ({ ...current, weight: value }))
                               }
                               placeholder="135"
                               value={set.weight}
@@ -818,10 +752,7 @@ export default function NewWorkoutScreen() {
                               keyboardType="number-pad"
                               label="Reps"
                               onChangeText={(value) =>
-                                updateSet(exercise.id, set.id, (current) => ({
-                                  ...current,
-                                  reps: value,
-                                }))
+                                updateSet(exercise.id, set.id, (current) => ({ ...current, reps: value }))
                               }
                               placeholder="8"
                               value={set.reps}
@@ -833,10 +764,7 @@ export default function NewWorkoutScreen() {
                               keyboardType="decimal-pad"
                               label="RPE (optional)"
                               onChangeText={(value) =>
-                                updateSet(exercise.id, set.id, (current) => ({
-                                  ...current,
-                                  rpe: value,
-                                }))
+                                updateSet(exercise.id, set.id, (current) => ({ ...current, rpe: value }))
                               }
                               placeholder="8.5"
                               value={set.rpe}
@@ -845,10 +773,7 @@ export default function NewWorkoutScreen() {
                               <Text style={styles.switchLabel}>Pain flag</Text>
                               <Switch
                                 onValueChange={(value) =>
-                                  updateSet(exercise.id, set.id, (current) => ({
-                                    ...current,
-                                    painFlag: value,
-                                  }))
+                                  updateSet(exercise.id, set.id, (current) => ({ ...current, painFlag: value }))
                                 }
                                 thumbColor={set.painFlag ? colors.danger : colors.textSoft}
                                 trackColor={{ false: colors.surfaceAlt, true: colors.dangerSurface }}
@@ -861,12 +786,9 @@ export default function NewWorkoutScreen() {
                             label="Set notes (optional)"
                             multiline
                             onChangeText={(value) =>
-                              updateSet(exercise.id, set.id, (current) => ({
-                                ...current,
-                                notes: value,
-                              }))
+                              updateSet(exercise.id, set.id, (current) => ({ ...current, notes: value }))
                             }
-                            placeholder="Last rep slow, switched grip, etc."
+                            placeholder="Last rep slow, switched grip..."
                             value={set.notes}
                           />
                         </Card>
@@ -881,6 +803,7 @@ export default function NewWorkoutScreen() {
                           }))
                         }
                         variant="secondary"
+                        size="sm"
                       />
                     </View>
                   );
@@ -889,6 +812,7 @@ export default function NewWorkoutScreen() {
             </Card>
           </ScrollView>
 
+          {/* Footer action bar */}
           <View style={styles.footerBar}>
             {error ? <ErrorState message={error} /> : null}
             {workout.exercises.length > 0 ? (
@@ -896,12 +820,18 @@ export default function NewWorkoutScreen() {
                 label="Ask Coach to Adjust"
                 onPress={openAdjustModal}
                 variant="secondary"
+                leftIcon={<Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.textMuted} />}
               />
             ) : null}
             <Button
-              label={`Finish Workout${workout.exercises.length > 0 ? ` · ${workout.exercises.length} exercise${workout.exercises.length !== 1 ? 's' : ''}` : ''}`}
+              label={
+                workout.exercises.length > 0
+                  ? `Finish Workout · ${workout.exercises.length} exercise${workout.exercises.length !== 1 ? 's' : ''}`
+                  : 'Finish Workout'
+              }
               loading={saving}
               onPress={() => void handleFinishWorkout()}
+              size="lg"
             />
           </View>
         </KeyboardAvoidingView>
@@ -919,7 +849,6 @@ export default function NewWorkoutScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
 
-            {/* Input step */}
             {adjustStep === 'input' && (
               <ScrollView
                 contentContainerStyle={styles.modalContent}
@@ -929,7 +858,9 @@ export default function NewWorkoutScreen() {
                 <Text style={styles.modalSubtitle}>
                   Tell the coach what you need. It will propose changes — you decide whether to apply.
                 </Text>
-                <Text style={styles.modalContextNote}>Using your recent logs + PRs</Text>
+                <Text style={styles.modalContextNote}>
+                  Using your recent logs + PRs + progression targets
+                </Text>
 
                 <TextInput
                   autoFocus
@@ -946,10 +877,7 @@ export default function NewWorkoutScreen() {
                     <Pressable
                       key={ex}
                       onPress={() => setAdjustRequest(ex)}
-                      style={({ pressed }) => [
-                        styles.exampleChip,
-                        pressed && styles.chipPressed,
-                      ]}
+                      style={({ pressed }) => [styles.exampleChip, pressed && styles.chipPressed]}
                     >
                       <Text style={styles.exampleChipText}>{ex}</Text>
                     </Pressable>
@@ -957,22 +885,14 @@ export default function NewWorkoutScreen() {
                 </View>
 
                 <View style={styles.modalActions}>
-                  <Button
-                    label="Cancel"
-                    onPress={() => setAdjustModalVisible(false)}
-                    variant="ghost"
-                  />
+                  <Button label="Cancel" onPress={() => setAdjustModalVisible(false)} variant="ghost" />
                   <View style={styles.modalActionFlex}>
-                    <Button
-                      label="Ask Coach"
-                      onPress={() => void handleAskCoach()}
-                    />
+                    <Button label="Ask Coach" onPress={() => void handleAskCoach()} />
                   </View>
                 </View>
               </ScrollView>
             )}
 
-            {/* Loading step */}
             {adjustStep === 'loading' && (
               <View style={styles.loadingStep}>
                 <ActivityIndicator color={colors.accent} size="large" />
@@ -980,30 +900,21 @@ export default function NewWorkoutScreen() {
               </View>
             )}
 
-            {/* Result step */}
             {adjustStep === 'result' && (
-              <ScrollView
-                contentContainerStyle={styles.modalContent}
-                showsVerticalScrollIndicator={false}
-              >
+              <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
                 <Text style={styles.modalTitle}>Proposed Adjustments</Text>
 
                 {adjustError ? (
                   <>
                     <Text style={styles.adjustError}>{adjustError}</Text>
-                    <Button
-                      label="Try Again"
-                      onPress={() => void handleAskCoach()}
-                      variant="secondary"
-                    />
+                    <Button label="Try Again" onPress={() => void handleAskCoach()} variant="secondary" />
                   </>
                 ) : adjustResult ? (
                   <>
                     {adjustResult.safetyNote ? (
                       <View style={styles.safetyBanner}>
-                        <Text style={styles.safetyBannerText}>
-                          ⚠ {adjustResult.safetyNote}
-                        </Text>
+                        <Ionicons name="warning-outline" size={16} color={colors.danger} />
+                        <Text style={styles.safetyBannerText}>{adjustResult.safetyNote}</Text>
                       </View>
                     ) : null}
 
@@ -1014,7 +925,7 @@ export default function NewWorkoutScreen() {
 
                     {adjustResult.changes.length > 0 ? (
                       <View style={styles.changesSection}>
-                        <Text style={styles.changesSectionLabel}>CHANGES</Text>
+                        <Text style={styles.changesSectionLabel}>PROPOSED CHANGES</Text>
                         {adjustResult.changes.map((change, i) => (
                           <View key={i} style={styles.changeRow}>
                             <View style={styles.changeTypeBadge}>
@@ -1022,7 +933,7 @@ export default function NewWorkoutScreen() {
                             </View>
                             <View style={styles.changeDetail}>
                               <Text style={styles.changeOriginal}>{change.original}</Text>
-                              <Text style={styles.changeArrow}>→</Text>
+                              <Text style={styles.changeArrow}>↓</Text>
                               <Text style={styles.changeUpdated}>{change.updated}</Text>
                               <Text style={styles.changeReason}>{change.reason}</Text>
                             </View>
@@ -1032,15 +943,11 @@ export default function NewWorkoutScreen() {
                     ) : null}
 
                     <View style={styles.modalActions}>
-                      <Button
-                        label="Cancel"
-                        onPress={() => setAdjustModalVisible(false)}
-                        variant="ghost"
-                      />
+                      <Button label="Cancel" onPress={() => setAdjustModalVisible(false)} variant="ghost" />
                       {adjustResult.updatedWorkoutPatch && !isStopSafetyNote(adjustResult.safetyNote) && (
                         <View style={styles.modalActionFlex}>
                           <Button
-                            label={adjustResult.safetyNote ? 'Apply Conservative Changes' : 'Apply Changes'}
+                            label={adjustResult.safetyNote ? 'Apply Conservatively' : 'Apply Changes'}
                             onPress={() => {
                               applyWorkoutPatch(adjustResult.updatedWorkoutPatch);
                               setAdjustModalVisible(false);
@@ -1065,22 +972,13 @@ function normalizeExerciseName(value: string) {
 }
 
 function formatHeaviest(personalBest: PersonalBestSummary) {
-  if (!personalBest.heaviestWeight.weight) {
-    return 'no load';
-  }
-
-  if (personalBest.heaviestWeight.reps) {
-    return `${personalBest.heaviestWeight.weight} lb × ${personalBest.heaviestWeight.reps}`;
-  }
-
+  if (!personalBest.heaviestWeight.weight) return 'no load';
+  if (personalBest.heaviestWeight.reps) return `${personalBest.heaviestWeight.weight} lb × ${personalBest.heaviestWeight.reps}`;
   return `${personalBest.heaviestWeight.weight} lb`;
 }
 
 function formatRecommendationTarget(recommendation: ProgressionRecommendation) {
-  if (recommendation.recommendedNextWeight === null) {
-    return `Next: ${recommendation.recommendedRepTarget}`;
-  }
-
+  if (recommendation.recommendedNextWeight === null) return `Next: ${recommendation.recommendedRepTarget}`;
   return `Next: ${recommendation.recommendedNextWeight} lb × ${recommendation.recommendedRepTarget}`;
 }
 
@@ -1094,18 +992,20 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: spacing.lg,
-    paddingBottom: 160,
+    paddingBottom: 180,
   },
   sectionHint: {
     color: colors.textSoft,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 1.0,
+    marginTop: spacing.sm,
     textTransform: 'uppercase',
   },
   emptyText: {
     color: colors.textMuted,
     fontSize: fontSizes.md,
+    lineHeight: 22,
   },
   filterRow: {
     flexDirection: 'row',
@@ -1126,10 +1026,10 @@ const styles = StyleSheet.create({
   filterPillText: {
     color: colors.textSoft,
     fontSize: fontSizes.sm,
-    fontWeight: '700',
+    fontWeight: fontWeights.heavy,
   },
   filterPillTextActive: {
-    color: colors.background,
+    color: '#0B0F0A',
   },
   presetRow: {
     alignItems: 'center',
@@ -1147,7 +1047,7 @@ const styles = StyleSheet.create({
   presetName: {
     color: colors.text,
     fontSize: fontSizes.md,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
   },
   presetMuscles: {
     color: colors.textMuted,
@@ -1156,8 +1056,8 @@ const styles = StyleSheet.create({
   },
   presetBadge: {
     backgroundColor: colors.surfaceAccent,
-    borderColor: colors.borderAccent,
-    borderRadius: radius.sm,
+    borderColor: colors.accentBorder,
+    borderRadius: radius.xs,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
@@ -1165,7 +1065,7 @@ const styles = StyleSheet.create({
   presetBadgeText: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
   customToggle: {
     paddingVertical: spacing.sm,
@@ -1186,8 +1086,10 @@ const styles = StyleSheet.create({
   suggestionText: {
     color: colors.text,
     fontSize: fontSizes.sm,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
   },
+
+  // Exercise card
   exerciseCard: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.border,
@@ -1197,25 +1099,43 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     padding: spacing.lg,
   },
+  exerciseTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  exerciseTitle: {
+    color: colors.text,
+    flex: 1,
+    fontSize: fontSizes.xl,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.2,
+  },
+  removeButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
   exerciseInsightCard: {
-    gap: spacing.md,
+    gap: spacing.sm,
     padding: spacing.md,
   },
-  exerciseInsightText: {
-    color: colors.text,
-    fontSize: fontSizes.md,
-    lineHeight: 20,
+  exerciseInsightTarget: {
+    color: colors.accent,
+    fontSize: fontSizes.xl,
+    fontWeight: fontWeights.heavy,
+    lineHeight: 28,
   },
   exerciseInsightMuted: {
     color: colors.textMuted,
     fontSize: fontSizes.sm,
     lineHeight: 18,
-  },
-  exerciseInsightTarget: {
-    color: colors.accent,
-    fontSize: fontSizes.xl,
-    fontWeight: '800',
-    lineHeight: 28,
   },
   inlineLoadingRow: {
     alignItems: 'center',
@@ -1227,16 +1147,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  exerciseRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  exerciseFields: {
+    gap: spacing.md,
   },
-  exerciseLabel: {
-    color: colors.text,
-    fontSize: fontSizes.lg,
-    fontWeight: '800',
-  },
+
+  // Set card
   setCard: {
     gap: spacing.md,
     padding: spacing.md,
@@ -1249,21 +1164,43 @@ const styles = StyleSheet.create({
   setTitle: {
     color: colors.text,
     fontSize: fontSizes.lg,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
-  rowActions: {
+  setHeaderActions: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
-  inlineLink: {
+  setActionChip: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAccent,
+    borderColor: colors.accentBorder,
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
+  setActionChipText: {
     color: colors.accent,
-    fontSize: fontSizes.sm,
-    fontWeight: '800',
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.heavy,
   },
-  inlineDangerLink: {
+  setActionChipDanger: {
+    alignItems: 'center',
+    backgroundColor: colors.dangerSurface,
+    borderColor: 'rgba(224, 108, 117, 0.28)',
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
+  setActionChipDangerText: {
     color: colors.danger,
-    fontSize: fontSizes.sm,
-    fontWeight: '800',
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.heavy,
   },
   twoColumnRow: {
     flexDirection: 'row',
@@ -1276,18 +1213,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     justifyContent: 'space-between',
-    minHeight: 54,
+    minHeight: 52,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
   switchLabel: {
     color: colors.textMuted,
-    fontSize: fontSizes.md,
-    fontWeight: '700',
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.heavy,
   },
+
+  inlineLink: {
+    color: colors.accent,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.heavy,
+  },
+
+  // Footer
   footerBar: {
     backgroundColor: colors.glassBar,
-    borderTopColor: colors.border,
+    borderTopColor: 'rgba(163, 190, 98, 0.14)',
     borderTopWidth: 1,
     bottom: 0,
     gap: spacing.sm,
@@ -1299,12 +1244,12 @@ const styles = StyleSheet.create({
     right: 0,
   },
   buttonPressed: {
-    opacity: 0.82,
+    opacity: 0.78,
   },
 
   // Coach adjustment modal
   modalOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.72)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     flex: 1,
     justifyContent: 'flex-end',
   },
@@ -1315,7 +1260,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundElevated,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '88%',
+    maxHeight: '90%',
     paddingTop: spacing.md,
   },
   modalHandle: {
@@ -1334,7 +1279,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     color: colors.text,
     fontSize: fontSizes.xxl,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     letterSpacing: -0.4,
   },
   modalSubtitle: {
@@ -1346,7 +1291,8 @@ const styles = StyleSheet.create({
   modalContextNote: {
     color: colors.textSoft,
     fontSize: fontSizes.sm,
-    lineHeight: 18,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 0.4,
   },
   adjustInput: {
     backgroundColor: colors.surfaceInput,
@@ -1355,7 +1301,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     color: colors.text,
     fontSize: fontSizes.md,
-    minHeight: 80,
+    minHeight: 88,
     padding: spacing.md,
     textAlignVertical: 'top',
   },
@@ -1370,7 +1316,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
-    paddingVertical: 7,
+    paddingVertical: 8,
   },
   chipPressed: {
     opacity: 0.72,
@@ -1378,7 +1324,7 @@ const styles = StyleSheet.create({
   exampleChipText: {
     color: colors.textMuted,
     fontSize: fontSizes.sm,
-    fontWeight: '600',
+    fontWeight: fontWeights.medium,
   },
   modalActions: {
     flexDirection: 'row',
@@ -1402,21 +1348,25 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   safetyBanner: {
+    alignItems: 'flex-start',
     backgroundColor: colors.dangerSurface,
-    borderColor: colors.danger,
+    borderColor: 'rgba(224, 108, 117, 0.35)',
     borderRadius: radius.sm,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
     padding: spacing.md,
   },
   safetyBannerText: {
     color: colors.danger,
+    flex: 1,
     fontSize: fontSizes.sm,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     lineHeight: 20,
   },
   coachNoteCard: {
     backgroundColor: colors.surfaceAccent,
-    borderColor: colors.borderAccent,
+    borderColor: colors.accentBorder,
     borderRadius: radius.md,
     borderWidth: 1,
     gap: spacing.xs,
@@ -1425,8 +1375,8 @@ const styles = StyleSheet.create({
   coachNoteLabel: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 1.4,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 1.8,
     textTransform: 'uppercase',
   },
   coachNoteText: {
@@ -1440,8 +1390,8 @@ const styles = StyleSheet.create({
   changesSectionLabel: {
     color: colors.textSoft,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 1.2,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
   },
   changeRow: {
@@ -1454,24 +1404,24 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   changeTypeBadge: {
+    alignSelf: 'flex-start',
     backgroundColor: colors.surface,
     borderColor: colors.borderStrong,
-    borderRadius: radius.sm,
+    borderRadius: radius.xs,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
-    alignSelf: 'flex-start',
   },
   changeTypeText: {
     color: colors.textMuted,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   changeDetail: {
     flex: 1,
-    gap: 3,
+    gap: 4,
   },
   changeOriginal: {
     color: colors.textSoft,
@@ -1481,12 +1431,12 @@ const styles = StyleSheet.create({
   changeArrow: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
   changeUpdated: {
     color: colors.text,
     fontSize: fontSizes.md,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
   },
   changeReason: {
     color: colors.textMuted,

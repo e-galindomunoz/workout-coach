@@ -5,6 +5,7 @@ import { AppScreen } from '../../components/AppScreen';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { Input } from '../../components/ui/Input';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { Pill } from '../../components/ui/Pill';
@@ -13,7 +14,7 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { StatCard } from '../../components/ui/StatCard';
 import { getAllPersonalBests, getExerciseSessionVolume } from '../../lib/progression';
 import { getAllExerciseLogs, getBodyMetrics, getRecentWorkoutSessions } from '../../lib/supabase';
-import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 import { getWorkoutsThisWeekCount } from '../../lib/workouts';
 import type { BodyMetric, ExerciseLog, PersonalBestSummary, WorkoutSession } from '../../types/supabase';
 
@@ -73,10 +74,7 @@ export default function ProgressScreen() {
 
   const personalBests = useMemo(() => getAllPersonalBests(logs), [logs]);
   const filteredBests = useMemo(() => {
-    if (!search.trim()) {
-      return personalBests;
-    }
-
+    if (!search.trim()) return personalBests;
     const query = search.trim().toLowerCase();
     return personalBests.filter((item) => item.exerciseName.toLowerCase().includes(query));
   }, [personalBests, search]);
@@ -85,16 +83,13 @@ export default function ProgressScreen() {
   const weeklyConsistency = useMemo(() => {
     const counts = [0, 0, 0, 0];
     const now = new Date();
-
     sessions.forEach((session) => {
       const diffMs = now.getTime() - new Date(session.started_at).getTime();
       const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-
       if (diffWeeks >= 0 && diffWeeks < 4) {
         counts[3 - diffWeeks] += 1;
       }
     });
-
     return counts;
   }, [sessions]);
   const maxWeekCount = Math.max(...weeklyConsistency, 1);
@@ -116,7 +111,7 @@ export default function ProgressScreen() {
             <StatCard
               label="Tracked lifts"
               value={`${personalBests.length}`}
-              caption="Exercises with history"
+              caption="With logged history"
               accent
               style={styles.statFlex}
             />
@@ -128,30 +123,42 @@ export default function ProgressScreen() {
             />
           </View>
 
-          <Card>
-            <SectionHeader title="Weight trend" subtitle="Your latest bodyweight movement." />
+          {/* Weight trend */}
+          <GlassCard>
+            <SectionHeader title="Bodyweight Trend" subtitle="Latest weight and recent movement." />
             {metrics.length === 0 ? (
               <EmptyState
                 title="No weight data yet"
                 description="Log bodyweight on the Dashboard to see your trend here."
+                icon="⚖️"
               />
             ) : (
               <>
                 <Text style={styles.trendNumber}>{metrics[0].weight} lb</Text>
-                <Text style={styles.trendLabel}>
+                <Text style={styles.trendDate}>
                   Latest · {formatDate(metrics[0].logged_at)}
                 </Text>
-                <Text style={styles.trendDetail}>
-                  {weightDelta === null
-                    ? 'Add one more check-in to see your recent change.'
-                    : `Recent change: ${weightDelta > 0 ? '+' : ''}${weightDelta.toFixed(1)} lb vs previous entry.`}
-                </Text>
+                {weightDelta !== null ? (
+                  <View style={styles.trendDeltaRow}>
+                    <Text style={[
+                      styles.trendDelta,
+                      weightDelta > 0 && styles.trendUp,
+                      weightDelta < 0 && styles.trendDown,
+                    ]}>
+                      {weightDelta > 0 ? '+' : ''}{weightDelta.toFixed(1)} lb
+                    </Text>
+                    <Text style={styles.trendDeltaLabel}> vs previous entry</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.trendDetail}>Log another entry to see your change.</Text>
+                )}
               </>
             )}
-          </Card>
+          </GlassCard>
 
+          {/* Training consistency */}
           <Card>
-            <SectionHeader title="Training consistency" subtitle="Sessions per week over the last four weeks." />
+            <SectionHeader title="Training Consistency" subtitle="Sessions per week, last four weeks." />
             <View style={styles.consistencyList}>
               {weeklyConsistency.map((count, index) => (
                 <View key={`week-${index}`} style={styles.consistencyRow}>
@@ -159,7 +166,10 @@ export default function ProgressScreen() {
                     {index === 3 ? 'This wk' : `${3 - index} wks ago`}
                   </Text>
                   <View style={styles.consistencyBarWrap}>
-                    <ProgressBar value={(count / maxWeekCount) * 100} />
+                    <ProgressBar
+                      value={(count / maxWeekCount) * 100}
+                      tone={count >= 3 ? 'accent' : count >= 1 ? 'accent' : 'accent'}
+                    />
                   </View>
                   <Text style={styles.consistencyValue}>{count}</Text>
                 </View>
@@ -167,10 +177,14 @@ export default function ProgressScreen() {
             </View>
           </Card>
 
+          {/* Personal bests */}
           <Card>
-            <SectionHeader title="Personal bests" subtitle="Tap any lift for full stats and your next target." />
+            <SectionHeader
+              title="Personal Bests"
+              subtitle="Tap any lift for full stats and your next target."
+            />
             <Input
-              label="Search exercises"
+              label="Search lifts"
               onChangeText={setSearch}
               placeholder="Deadlift, bench press, squat..."
               value={search}
@@ -184,6 +198,7 @@ export default function ProgressScreen() {
                     ? 'Log your first workout to start building personal bests.'
                     : 'Try a different search term.'
                 }
+                icon={personalBests.length === 0 ? '🏆' : '🔍'}
               />
             ) : (
               filteredBests.map((item) => (
@@ -200,26 +215,28 @@ export default function ProgressScreen() {
                   <View style={styles.exerciseHeader}>
                     <View style={styles.exerciseMeta}>
                       <Text style={styles.exerciseName}>{item.exerciseName}</Text>
-                      <Text style={styles.exerciseSubtext}>
-                        {item.muscleGroup ?? 'Muscle group not set'}
-                      </Text>
+                      {item.muscleGroup ? (
+                        <Text style={styles.exerciseSubtext}>{item.muscleGroup}</Text>
+                      ) : null}
                     </View>
                     <Pill label={formatTrend(item)} tone={getTrendTone(item)} />
                   </View>
 
-                  <View style={styles.bestRow}>
-                    <Text style={styles.bestLabel}>Heaviest</Text>
-                    <Text style={styles.bestValue}>{formatHeaviest(item)}</Text>
+                  <View style={styles.bestGrid}>
+                    <View style={styles.bestItem}>
+                      <Text style={styles.bestLabel}>Heaviest</Text>
+                      <Text style={styles.bestValue}>{formatHeaviest(item)}</Text>
+                    </View>
+                    <View style={styles.bestItem}>
+                      <Text style={styles.bestLabel}>Est. 1RM</Text>
+                      <Text style={[styles.bestValue, styles.bestValueAccent]}>
+                        {formatEstimatedOneRepMax(item)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.bestRow}>
-                    <Text style={styles.bestLabel}>Est. 1RM</Text>
-                    <Text style={styles.bestValue}>{formatEstimatedOneRepMax(item)}</Text>
-                  </View>
-                  <View style={styles.bestRow}>
-                    <Text style={styles.bestLabel}>Best volume</Text>
-                    <Text style={styles.bestValue}>{formatVolume(item)}</Text>
-                  </View>
-                  <Text style={styles.exerciseFooter}>Last performed {formatDate(item.lastPerformedDate ?? new Date().toISOString())}</Text>
+                  <Text style={styles.exerciseFooter}>
+                    Last performed {formatDate(item.lastPerformedDate ?? new Date().toISOString())}
+                  </Text>
                 </Pressable>
               ))
             )}
@@ -239,61 +256,32 @@ function formatDate(value: string) {
 }
 
 function formatTrend(item: PersonalBestSummary) {
-  if (item.recentTrend === 'insufficient_data') {
-    return 'Needs data';
-  }
-
-  if (item.recentTrend === 'up') {
-    return 'Trending up';
-  }
-
-  if (item.recentTrend === 'down') {
-    return 'Trending down';
-  }
-
+  if (item.recentTrend === 'insufficient_data') return 'Baseline';
+  if (item.recentTrend === 'up') return 'Trending ↑';
+  if (item.recentTrend === 'down') return 'Trending ↓';
   return 'Stable';
 }
 
 function getTrendTone(item: PersonalBestSummary) {
-  if (item.recentTrend === 'up') {
-    return 'success' as const;
-  }
-
-  if (item.recentTrend === 'down') {
-    return 'warning' as const;
-  }
-
+  if (item.recentTrend === 'up') return 'success' as const;
+  if (item.recentTrend === 'down') return 'warning' as const;
   return 'default' as const;
 }
 
 function formatHeaviest(item: PersonalBestSummary) {
-  if (!item.heaviestWeight.weight) {
-    return 'No load yet';
-  }
-
+  if (!item.heaviestWeight.weight) return 'No load yet';
   return `${item.heaviestWeight.weight} lb${item.heaviestWeight.reps ? ` × ${item.heaviestWeight.reps}` : ''}`;
 }
 
 function formatEstimatedOneRepMax(item: PersonalBestSummary) {
-  if (!item.bestEstimatedOneRepMax.value) {
-    return 'N/A';
-  }
-
+  if (!item.bestEstimatedOneRepMax.value) return 'N/A';
   return `${Math.round(item.bestEstimatedOneRepMax.value)} lb`;
-}
-
-function formatVolume(item: PersonalBestSummary) {
-  if (!item.highestSessionVolume.volume) {
-    return 'N/A';
-  }
-
-  return `${Math.round(item.highestSessionVolume.volume)} lb`;
 }
 
 const styles = StyleSheet.create({
   content: {
     gap: spacing.lg,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
   statRow: {
     flexDirection: 'row',
@@ -302,17 +290,40 @@ const styles = StyleSheet.create({
   statFlex: {
     flex: 1,
   },
+
+  // Trend
   trendNumber: {
     color: colors.text,
-    fontSize: 34,
-    fontWeight: '800',
-    letterSpacing: -0.5,
+    fontSize: 38,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.8,
+    marginTop: spacing.xs,
   },
-  trendLabel: {
+  trendDate: {
     color: colors.accent,
     fontSize: fontSizes.sm,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
     marginTop: 4,
+  },
+  trendDeltaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+  },
+  trendDelta: {
+    color: colors.textMuted,
+    fontSize: fontSizes.xl,
+    fontWeight: fontWeights.heavy,
+  },
+  trendUp: {
+    color: colors.success,
+  },
+  trendDown: {
+    color: colors.warning,
+  },
+  trendDeltaLabel: {
+    color: colors.textSoft,
+    fontSize: fontSizes.md,
   },
   trendDetail: {
     color: colors.textMuted,
@@ -320,9 +331,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: spacing.sm,
   },
+
+  // Consistency
   consistencyList: {
     gap: spacing.md,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   consistencyRow: {
     alignItems: 'center',
@@ -332,8 +345,9 @@ const styles = StyleSheet.create({
   consistencyLabel: {
     color: colors.textMuted,
     fontSize: fontSizes.xs,
-    fontWeight: '700',
-    width: 58,
+    fontWeight: fontWeights.heavy,
+    textTransform: 'uppercase',
+    width: 60,
   },
   consistencyBarWrap: {
     flex: 1,
@@ -341,21 +355,23 @@ const styles = StyleSheet.create({
   consistencyValue: {
     color: colors.text,
     fontSize: fontSizes.md,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     textAlign: 'right',
     width: 20,
   },
+
+  // Exercise cards
   exerciseCard: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.border,
     borderRadius: radius.md,
     borderWidth: 1,
-    gap: spacing.md,
+    gap: spacing.sm,
     marginTop: spacing.sm,
     padding: spacing.lg,
   },
   rowPressed: {
-    opacity: 0.82,
+    opacity: 0.78,
   },
   exerciseHeader: {
     alignItems: 'center',
@@ -365,35 +381,45 @@ const styles = StyleSheet.create({
   },
   exerciseMeta: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
   exerciseName: {
     color: colors.text,
     fontSize: fontSizes.xl,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
   },
   exerciseSubtext: {
     color: colors.textSoft,
     fontSize: fontSizes.sm,
-    fontWeight: '700',
+    fontWeight: fontWeights.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
-  bestRow: {
-    alignItems: 'center',
+  bestGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: spacing.lg,
+  },
+  bestItem: {
+    gap: 3,
   },
   bestLabel: {
-    color: colors.textMuted,
-    fontSize: fontSizes.sm,
+    color: colors.textSoft,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   bestValue: {
     color: colors.text,
-    fontSize: fontSizes.md,
-    fontWeight: '800',
+    fontSize: fontSizes.lg,
+    fontWeight: fontWeights.heavy,
+  },
+  bestValueAccent: {
+    color: colors.accent,
   },
   exerciseFooter: {
     color: colors.textSoft,
     fontSize: fontSizes.sm,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
 });

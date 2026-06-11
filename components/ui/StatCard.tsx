@@ -1,6 +1,6 @@
 import { StyleProp, StyleSheet, Text, ViewStyle } from 'react-native';
 import { Card } from './Card';
-import { colors, fontSizes, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, spacing } from '../../lib/theme';
 
 type StatCardProps = {
   label: string;
@@ -22,20 +22,21 @@ export function StatCard({ label, value, caption, accent = false, style }: StatC
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.sm,
+    gap: 4,
   },
   label: {
     color: colors.textSoft,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 0.9,
     textTransform: 'uppercase',
   },
   value: {
     color: colors.text,
     fontSize: fontSizes.xxl,
-    fontWeight: '800',
+    fontWeight: fontWeights.heavy,
     letterSpacing: -0.6,
+    lineHeight: 34,
   },
   valueAccent: {
     color: colors.accent,
@@ -44,5 +45,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSizes.sm,
     lineHeight: 18,
+    marginTop: 2,
   },
 });

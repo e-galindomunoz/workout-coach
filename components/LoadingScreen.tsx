@@ -8,8 +8,7 @@ type LoadingScreenProps = {
 export function LoadingScreen({ message }: LoadingScreenProps) {
   return (
     <AppScreen
-      title="One second"
-      description="We’re syncing your session and preparing the app."
+      title="Ironline"
       fillContent
       scrollEnabled={false}
     >
