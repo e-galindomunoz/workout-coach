@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +17,7 @@ import { sendCoachMessage } from '../../lib/coachApi';
 import { getCoachContext } from '../../lib/coachContext';
 import { normalizeCoachChatResponse } from '../../lib/aiValidation';
 import { clearCoachMessages, getCoachMessages, saveCoachMessage } from '../../lib/supabase';
-import { colors, fontSizes, radius, spacing } from '../../lib/theme';
+import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 import type { CoachMessage } from '../../types/ai';
 
 // ─── Quick prompts ────────────────────────────────────────────────────────────
@@ -160,7 +161,10 @@ export default function CoachScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerEyebrow}>IRONLINE</Text>
+          <View style={styles.eyebrowRow}>
+            <Ionicons name="barbell-outline" size={13} color={colors.accent} />
+            <Text style={styles.headerEyebrow}>IRONLINE</Text>
+          </View>
           <Text style={styles.headerTitle}>Coach</Text>
         </View>
         {hasMessages && (
@@ -441,22 +445,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: spacing.md,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xl,
+  },
+  eyebrowRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
   },
   headerEyebrow: {
     color: colors.accent,
     fontSize: fontSizes.xs,
-    fontWeight: '800',
-    letterSpacing: 1.8,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 2.4,
     textTransform: 'uppercase',
   },
   headerTitle: {
     color: colors.text,
-    fontSize: 34,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    lineHeight: 40,
-    marginTop: 2,
+    fontSize: fontSizes.hero,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.8,
   },
   clearButton: {
     paddingBottom: 4,

@@ -1,6 +1,5 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,7 +19,9 @@ import {
   validateProfileForm,
 } from '../lib/profile';
 import { HeightPickerField } from './HeightPickerField';
+import { Button } from './ui/Button';
 import { createProfile, updateProfile } from '../lib/supabase';
+import { colors, fontSizes, fontWeights, radius, spacing } from '../lib/theme';
 import type { Profile, ProfileFormValues } from '../types/supabase';
 
 const PROFILE_SAVE_TIMEOUT_MS = 8000;
@@ -68,7 +69,7 @@ export function ProfileForm({
   const currentStep = STEPS[step];
   const primaryButtonLabel = isLastStep
     ? mode === 'onboarding'
-      ? 'Complete onboarding'
+      ? 'Complete setup'
       : 'Save profile'
     : 'Continue';
 
@@ -280,6 +281,7 @@ export function ProfileForm({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Step progress bar */}
         <View style={styles.progressRow}>
           {STEPS.map((item, index) => (
             <View
@@ -305,35 +307,22 @@ export function ProfileForm({
 
           <View style={styles.actions}>
             {step > 0 ? (
-              <Pressable
-                accessibilityRole="button"
+              <Button
                 disabled={saving}
+                label="Back"
                 onPress={() => setStep((current) => current - 1)}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  (saving || pressed) && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.secondaryButtonText}>Back</Text>
-              </Pressable>
+                size="lg"
+                style={styles.actionButton}
+                variant="secondary"
+              />
             ) : null}
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={saving}
+            <Button
+              label={primaryButtonLabel}
+              loading={saving}
               onPress={handleContinue}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                (saving || pressed) && styles.buttonPressed,
-                step === 0 && styles.primaryButtonFullWidth,
-              ]}
-            >
-              {saving ? (
-                <ActivityIndicator color="#0f172a" />
-              ) : (
-                <Text style={styles.primaryButtonText}>{primaryButtonLabel}</Text>
-              )}
-            </Pressable>
+              size="lg"
+              style={[styles.actionButton, step === 0 && styles.actionButtonFull]}
+            />
           </View>
         </View>
       </ScrollView>
@@ -358,7 +347,7 @@ function InputField({
       <Text style={styles.label}>{label}</Text>
       <TextInput
         multiline={multiline}
-        placeholderTextColor="#64748b"
+        placeholderTextColor={colors.textSoft}
         style={[styles.input, multiline && styles.inputMultiline]}
         textAlignVertical={multiline ? 'top' : 'center'}
         {...props}
@@ -393,7 +382,7 @@ function ChoiceGroup({
               style={({ pressed }) => [
                 styles.choiceChip,
                 selected && styles.choiceChipSelected,
-                pressed && styles.buttonPressed,
+                pressed && styles.choiceChipPressed,
               ]}
             >
               <Text
@@ -422,144 +411,133 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 32,
+    paddingBottom: spacing.xxl,
   },
+
+  // Progress bar
   progressRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
+    gap: spacing.xs,
+    marginBottom: spacing.lg,
   },
   progressSegment: {
-    backgroundColor: '#1e293b',
-    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
     flex: 1,
-    height: 8,
+    height: 4,
   },
   progressSegmentActive: {
-    backgroundColor: '#38bdf8',
+    backgroundColor: colors.accent,
   },
+
+  // Step panel
   panel: {
-    backgroundColor: '#111827',
-    borderColor: '#1f2937',
-    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     borderWidth: 1,
-    gap: 18,
-    padding: 18,
+    gap: spacing.lg,
+    padding: spacing.lg,
   },
   stepEyebrow: {
-    color: '#38bdf8',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.7,
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 2.4,
     textTransform: 'uppercase',
   },
   stepTitle: {
-    color: '#f8fafc',
-    fontSize: 26,
-    fontWeight: '700',
+    color: colors.text,
+    fontSize: fontSizes.xxl,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.5,
   },
   stepDescription: {
-    color: '#cbd5e1',
-    fontSize: 15,
+    color: colors.textMuted,
+    fontSize: fontSizes.md,
     lineHeight: 22,
   },
+
+  // Fields
   fields: {
-    gap: 16,
+    gap: spacing.md,
   },
   fieldGroup: {
-    gap: 8,
+    gap: spacing.xs,
   },
   label: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 0.2,
   },
   input: {
-    backgroundColor: '#020617',
-    borderColor: '#334155',
-    borderRadius: 12,
+    backgroundColor: colors.surfaceInput,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    color: '#f8fafc',
-    fontSize: 16,
+    color: colors.text,
+    fontSize: fontSizes.lg,
     minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   inputMultiline: {
-    minHeight: 110,
+    minHeight: 100,
   },
+
+  // Two-column layout
   twoColumnRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.sm,
   },
+
+  // Choice chips
   choiceGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing.sm,
   },
   choiceChip: {
-    backgroundColor: '#020617',
-    borderColor: '#334155',
-    borderRadius: 999,
+    backgroundColor: colors.surfaceInput,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   choiceChipSelected: {
-    backgroundColor: '#38bdf8',
-    borderColor: '#38bdf8',
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  choiceChipPressed: {
+    opacity: 0.78,
   },
   choiceChipText: {
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontSize: fontSizes.sm,
+    fontWeight: fontWeights.bold,
   },
   choiceChipTextSelected: {
-    color: '#0f172a',
+    color: '#0B0F0A',
   },
+
+  // Error
   errorText: {
-    color: '#fca5a5',
-    fontSize: 14,
+    color: colors.danger,
+    fontSize: fontSizes.sm,
     lineHeight: 20,
   },
+
+  // Actions
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.sm,
   },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#1e293b',
-    borderRadius: 14,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 54,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  secondaryButtonText: {
-    color: '#f8fafc',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#38bdf8',
-    borderRadius: 14,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 54,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  primaryButtonFullWidth: {
+  actionButton: {
     flex: 1,
   },
-  primaryButtonText: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  buttonPressed: {
-    opacity: 0.84,
+  actionButtonFull: {
+    flex: 1,
   },
 });

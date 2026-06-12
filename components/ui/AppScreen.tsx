@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { PropsWithChildren } from 'react';
 import {
   RefreshControl,
@@ -50,7 +51,10 @@ export function AppScreen({
       {showHeader ? (
         <View style={[styles.headerCluster, headerAccessory ? styles.headerClusterRow : undefined]}>
           <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>IRONLINE</Text>
+            <View style={styles.eyebrowRow}>
+                <Ionicons name="barbell-outline" size={13} color={colors.accent} />
+                <Text style={styles.eyebrow}>IRONLINE</Text>
+              </View>
             <Text style={styles.title}>{title}</Text>
             {description ? <Text style={styles.description}>{description}</Text> : null}
           </View>
@@ -138,6 +142,11 @@ const styles = StyleSheet.create({
   },
   headerAccessory: {
     paddingTop: spacing.sm,
+  },
+  eyebrowRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
   },
   eyebrow: {
     color: colors.accent,

@@ -26,8 +26,8 @@ export default function OnboardingScreen() {
 
   return (
     <AppScreen
-      title="Build Your Profile"
-      description="Tell us about your training so we can tailor your experience."
+      title="Training Profile"
+      description="A few details to personalize your progression and AI coaching."
       fillContent
       scrollEnabled={false}
     >

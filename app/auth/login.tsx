@@ -21,7 +21,6 @@ export default function LoginScreen() {
   return (
     <AuthForm
       mode="login"
-      title="Welcome"
       alternateHref="/auth/signup"
       alternateLabel="Need an account? Create one"
     />
