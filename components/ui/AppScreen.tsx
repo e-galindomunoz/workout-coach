@@ -8,7 +8,10 @@ import {
   Text,
   View,
   ViewStyle,
+  Platform,
 } from 'react-native';
+import { useSegments } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontSizes, fontWeights, spacing } from '../../lib/theme';
 
 type AppScreenProps = PropsWithChildren<{
@@ -37,8 +40,13 @@ export function AppScreen({
   headerAccessory,
   fab,
 }: AppScreenProps) {
+  const segments = useSegments();
+  const insets = useSafeAreaInsets();
+  const isTabsRoute = segments[0] === 'tabs';
+  const bottomPadding = Math.max(insets.bottom, spacing.xxl) + (isTabsRoute ? 116 : 0);
+
   const content = (
-    <View style={styles.container}>
+    <View style={[styles.container, Platform.OS === 'web' && styles.webContainer, { paddingBottom: bottomPadding }]}>
       {showHeader ? (
         <View style={[styles.headerCluster, headerAccessory ? styles.headerClusterRow : undefined]}>
           <View style={styles.headerText}>
@@ -97,9 +105,13 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    width: '100%',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+  },
+  webContainer: {
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   headerCluster: {
     gap: spacing.sm,

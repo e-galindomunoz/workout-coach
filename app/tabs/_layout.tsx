@@ -63,7 +63,7 @@ function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
-  const { initialized, profileComplete, session } = useAuth();
+  const { initialized, profileComplete, profileReady, session } = useAuth();
 
   if (!initialized) {
     return <LoadingScreen message="Loading your account..." />;
@@ -71,6 +71,10 @@ export default function TabsLayout() {
 
   if (!session) {
     return <Redirect href="/auth/login" />;
+  }
+
+  if (!profileReady) {
+    return <LoadingScreen message="Loading your profile..." />;
   }
 
   if (!profileComplete) {
@@ -97,8 +101,11 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: colors.background,
+    alignSelf: 'center',
+    maxWidth: 560,
     paddingHorizontal: 12,
     paddingTop: 6,
+    width: '100%',
   },
   bar: {
     alignItems: 'center',

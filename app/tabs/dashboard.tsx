@@ -515,7 +515,6 @@ function formatDate(value: string) {
 const styles = StyleSheet.create({
   content: {
     gap: spacing.lg,
-    paddingBottom: 110,
   },
 
   // Hero

@@ -1,4 +1,4 @@
-# Workout Coach — Phase 2
+# Ironline — Phase 2
 
 iPhone-first workout tracking app. Built with Expo, React Native, TypeScript, Expo Router, and Supabase. Expo Go-compatible throughout.
 
@@ -48,6 +48,99 @@ npx expo start -c
 ```
 
 Your Mac and iPhone must be on the same Wi-Fi network. Scan the QR code with the iPhone Camera app or directly in Expo Go.
+
+## Web / PWA / Vercel
+
+Ironline also ships as a mobile-first web app and PWA.
+
+### Local web
+
+```bash
+npx expo start --web
+```
+
+Expo Router uses a web dev server on `http://localhost:19006` by default. Use the LAN URL Expo prints if you want to open the app on an iPhone Safari browser while both devices are on the same Wi-Fi network.
+
+### Production web build
+
+```bash
+npx expo export --platform web
+```
+
+- Output directory: `dist`
+- App manifest and PWA metadata come from `app.json`
+- `assets/icon.png` is used for the app icon
+
+### Vercel
+
+- Install command: `npm install`
+- Build command: `npx expo export --platform web`
+- Output directory: `dist`
+- The repo includes [`vercel.json`](./vercel.json) with the build and SPA rewrite config
+
+Required Vercel env vars:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+Do not add `OPENAI_API_KEY` to Vercel client env vars. OpenAI stays in Supabase Edge Function secrets only.
+
+### Supabase auth redirect URLs
+
+Add these to your Supabase Auth redirect allow list:
+
+- `http://localhost:19006`
+- `https://YOUR-VERCEL-APP.vercel.app`
+- `https://YOUR-VERCEL-APP.vercel.app/*` if you use preview or nested routes in redirects
+
+If you use Vercel preview deployments, add each preview URL you plan to use as well.
+
+### Add to Home Screen
+
+On iPhone Safari:
+
+1. Open the deployed Ironline URL.
+2. Tap the Share button.
+3. Tap Add to Home Screen.
+4. Confirm the name and icon.
+
+The PWA config uses the Ironline app name, the dark olive theme color, and `assets/icon.png`.
+
+### Web testing checklist
+
+Expo Go:
+
+- `npx expo start -c`
+- App still opens in Expo Go
+- Auth works
+- Workout logging works
+- AI coach works
+
+Local web:
+
+- `npx expo start --web`
+- Login/signup works
+- Session persists after refresh
+- Dashboard loads
+- Workout logging works
+- PRs and progression load
+- Coach chat works
+- Workout insight works
+- Workout adjustment works
+
+Vercel:
+
+- Deploy the repo
+- Set the two Expo public Supabase env vars
+- Add the Vercel URL to Supabase redirect URLs
+- Test auth
+- Test workout logging
+- Test AI coach
+- Open on iPhone Safari
+- Use Share → Add to Home Screen
+- Confirm the icon and name look correct
 
 ## Supabase tables required
 

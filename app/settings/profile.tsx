@@ -6,7 +6,7 @@ import { ProfileForm } from '../../components/ProfileForm';
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { applyProfile, initialized, profile, session } = useAuth();
+  const { applyProfile, initialized, profile, profileReady, session } = useAuth();
 
   if (!initialized) {
     return <LoadingScreen message="Loading your profile..." />;
@@ -14,6 +14,10 @@ export default function EditProfileScreen() {
 
   if (!session) {
     return <Redirect href="/auth/login" />;
+  }
+
+  if (!profileReady) {
+    return <LoadingScreen message="Loading your profile..." />;
   }
 
   return (

@@ -281,7 +281,6 @@ function formatEstimatedOneRepMax(item: PersonalBestSummary) {
 const styles = StyleSheet.create({
   content: {
     gap: spacing.lg,
-    paddingBottom: 110,
   },
   statRow: {
     flexDirection: 'row',

@@ -1,5 +1,13 @@
 import { Session, User } from '@supabase/supabase-js';
-import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  PropsWithChildren,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { getProfile, isProfileComplete, supabase } from '../lib/supabase';
 import type { Profile } from '../types/supabase';
 
@@ -10,6 +18,7 @@ type AuthContextValue = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  profileReady: boolean;
   profileComplete: boolean;
   refreshProfile: () => Promise<void>;
   applyProfile: (nextProfile: Profile) => void;
@@ -21,6 +30,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [initialized, setInitialized] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileReady, setProfileReady] = useState(false);
+  const sessionRef = useRef<Session | null>(null);
+  const profileRequestId = useRef(0);
 
   function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
     return Promise.race<T>([
@@ -36,28 +48,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     if (!activeSession) {
       setProfile(null);
+      setProfileReady(true);
       return;
     }
+
+    const requestId = ++profileRequestId.current;
 
     try {
       const { data, error } = await withTimeout(getProfile(), AUTH_TIMEOUT_MS);
-      setProfile(error ? null : data);
-    } catch {
-      setProfile(null);
-    }
-  }
+      if (requestId !== profileRequestId.current) {
+        return;
+      }
 
-  async function syncProfileForSession(nextSession: Session | null) {
-    if (!nextSession) {
-      setProfile(null);
-      return;
-    }
+      if (error) {
+        return;
+      }
 
-    try {
-      const profileResult = await withTimeout(getProfile(), AUTH_TIMEOUT_MS);
-      setProfile(profileResult.error ? null : profileResult.data);
+      setProfile(data);
+      setProfileReady(true);
     } catch {
-      setProfile(null);
+      if (requestId === profileRequestId.current && profile) {
+        setProfileReady(true);
+      }
     }
   }
 
@@ -78,11 +90,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (error) {
           setSession(null);
           setProfile(null);
+          setProfileReady(true);
           return;
         }
 
         setSession(data.session);
-        await syncProfileForSession(data.session);
+        sessionRef.current = data.session;
+
+        if (!data.session) {
+          setProfile(null);
+          setProfileReady(true);
+          return;
+        }
+
+        setProfileReady(false);
+        await refreshProfile(data.session);
       } catch {
         if (!active) {
           return;
@@ -90,6 +112,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
         setSession(null);
         setProfile(null);
+        setProfileReady(true);
       } finally {
         if (active) {
           setInitialized(true);
@@ -104,13 +127,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       if (active) {
         try {
-          setInitialized(false);
+          const currentUserId = sessionRef.current?.user.id;
+          const nextUserId = nextSession?.user.id;
+
           setSession(nextSession);
-          await syncProfileForSession(nextSession);
-        } catch {
+          sessionRef.current = nextSession;
+
+          if (!nextSession) {
+            profileRequestId.current += 1;
+            setProfile(null);
+            setProfileReady(true);
+            return;
+          }
+
+          if (currentUserId === nextUserId) {
+            return;
+          }
+
+          setInitialized(false);
           setProfile(null);
+          setProfileReady(false);
+          await refreshProfile(nextSession);
         } finally {
-          setInitialized(true);
+          if (active) {
+            setInitialized(true);
+          }
         }
       }
     });
@@ -127,15 +168,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
       session,
       user: session?.user ?? null,
       profile,
+      profileReady,
       profileComplete: isProfileComplete(profile),
       applyProfile: (nextProfile: Profile) => {
         setProfile(nextProfile);
+        setProfileReady(true);
       },
       refreshProfile: async () => {
         await refreshProfile();
       },
     }),
-    [initialized, profile, session],
+    [initialized, profile, profileReady, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

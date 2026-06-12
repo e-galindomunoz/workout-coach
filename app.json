@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Workout Coach",
-    "slug": "workout-coach",
+    "name": "Ironline",
+    "slug": "ironline",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#090B08",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -21,7 +21,21 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png",
+      "name": "Ironline",
+      "shortName": "Ironline",
+      "themeColor": "#090B08",
+      "backgroundColor": "#090B08",
+      "display": "standalone",
+      "startUrl": "/",
+      "scope": "/",
+      "splash": {
+        "backgroundColor": "#090B08",
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain"
+      }
     },
     "plugins": [
       "expo-router"
