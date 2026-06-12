@@ -181,9 +181,10 @@ export default function WorkoutSummaryScreen() {
       <Stack.Screen
         options={{
           title: 'Summary',
+          headerBackTitle: 'Tabs',
           headerRight: () =>
             session ? (
-              <Pressable onPress={confirmDeleteWorkout}>
+              <Pressable onPress={confirmDeleteWorkout} style={styles.headerDeleteButton}>
                 <Text style={styles.headerDelete}>Delete</Text>
               </Pressable>
             ) : null,
@@ -432,6 +433,13 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: fontSizes.md,
     fontWeight: fontWeights.heavy,
+  },
+  headerDeleteButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   content: {
     gap: spacing.lg,

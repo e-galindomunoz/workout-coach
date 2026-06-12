@@ -18,7 +18,6 @@ export default function LoginScreen() {
     <AuthForm
       mode="login"
       title="Welcome back"
-      description="Sign in with your Supabase account to open the app."
       alternateHref="/auth/signup"
       alternateLabel="Need an account? Create one"
     />

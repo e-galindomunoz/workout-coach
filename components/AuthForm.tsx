@@ -13,7 +13,7 @@ import { colors, fontSizes, fontWeights, spacing } from '../lib/theme';
 type AuthFormProps = {
   mode: 'login' | 'signup';
   title: string;
-  description: string;
+  description?: string;
   alternateHref: '/auth/login' | '/auth/signup';
   alternateLabel: string;
 };
@@ -113,19 +113,26 @@ export function AuthForm({
   }
 
   return (
-    <AppScreen title={title} description={description}>
+    <AppScreen
+      title={title}
+      description={description}
+      fillContent={mode === 'login'}
+      showHeader={mode !== 'login'}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.container}
+        style={[styles.container, mode === 'login' && styles.containerCentered]}
       >
-        <Card accent style={styles.heroCard}>
-          <Pill label={mode === 'login' ? 'Welcome back' : 'New account'} tone="accent" />
-          <Text style={styles.heroTitle}>
-            {mode === 'login'
-              ? 'Your training history, PRs, and progression are waiting for you.'
-              : 'Build your training history. Track every lift. Beat every record.'}
-          </Text>
-        </Card>
+        {mode === 'login' ? <Text style={styles.loginTitle}>{title}</Text> : null}
+
+        {mode === 'signup' ? (
+          <Card accent style={styles.heroCard}>
+            <Pill label="New account" tone="accent" />
+            <Text style={styles.heroTitle}>
+              Build your training history. Track every lift. Beat every record.
+            </Text>
+          </Card>
+        ) : null}
 
         <Card style={styles.formCard}>
           {mode === 'signup' ? (
@@ -194,6 +201,18 @@ export function AuthForm({
 const styles = StyleSheet.create({
   container: {
     gap: spacing.lg,
+  },
+  containerCentered: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+  },
+  loginTitle: {
+    color: colors.text,
+    fontSize: 34,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: -0.8,
+    textAlign: 'center',
   },
   heroCard: {
     gap: spacing.md,

@@ -14,6 +14,7 @@ import { colors, fontSizes, fontWeights, spacing } from '../../lib/theme';
 type AppScreenProps = PropsWithChildren<{
   title: string;
   description?: string;
+  showHeader?: boolean;
   scrollEnabled?: boolean;
   fillContent?: boolean;
   refreshing?: boolean;
@@ -27,6 +28,7 @@ export function AppScreen({
   title,
   description,
   children,
+  showHeader = true,
   scrollEnabled = true,
   fillContent = false,
   refreshing = false,
@@ -37,14 +39,16 @@ export function AppScreen({
 }: AppScreenProps) {
   const content = (
     <View style={styles.container}>
-      <View style={[styles.headerCluster, headerAccessory ? styles.headerClusterRow : undefined]}>
-        <View style={styles.headerText}>
-          <Text style={styles.eyebrow}>IRONLINE</Text>
-          <Text style={styles.title}>{title}</Text>
-          {description ? <Text style={styles.description}>{description}</Text> : null}
+      {showHeader ? (
+        <View style={[styles.headerCluster, headerAccessory ? styles.headerClusterRow : undefined]}>
+          <View style={styles.headerText}>
+            <Text style={styles.eyebrow}>IRONLINE</Text>
+            <Text style={styles.title}>{title}</Text>
+            {description ? <Text style={styles.description}>{description}</Text> : null}
+          </View>
+          {headerAccessory ? <View style={styles.headerAccessory}>{headerAccessory}</View> : null}
         </View>
-        {headerAccessory ? <View style={styles.headerAccessory}>{headerAccessory}</View> : null}
-      </View>
+      ) : null}
 
       <View style={[styles.content, fillContent && styles.contentFill, contentContainerStyle]}>
         {children}

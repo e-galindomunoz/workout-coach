@@ -202,16 +202,17 @@ export default function DashboardScreen() {
                 <Button
                   label="Start Workout"
                   onPress={() => router.push('/workout/new')}
-                  size="lg"
-                  style={styles.heroStartButton}
+                  size="sm"
+                  style={styles.heroActionButton}
                 />
-                <Pressable
+                <Button
+                  label="Log Weight"
+                  leftIcon={<Ionicons name="scale-outline" size={18} color={colors.accent} />}
                   onPress={() => setWeightModalVisible(true)}
-                  style={({ pressed }) => [styles.logWeightButton, pressed && styles.logWeightPressed]}
-                >
-                  <Ionicons name="scale-outline" size={18} color={colors.accent} />
-                  <Text style={styles.logWeightLabel}>Log Weight</Text>
-                </Pressable>
+                  size="sm"
+                  variant="glass"
+                  style={styles.heroActionButton}
+                />
               </View>
             </Card>
 
@@ -555,32 +556,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   heroActions: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     flexDirection: 'row',
     gap: spacing.md,
   },
-  heroStartButton: {
+  heroActionButton: {
     flex: 1,
-  },
-  logWeightButton: {
-    alignItems: 'center',
-    backgroundColor: colors.glassCard,
-    borderColor: colors.accentBorder,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    height: 52,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-  },
-  logWeightPressed: {
-    opacity: 0.72,
-  },
-  logWeightLabel: {
-    color: colors.accent,
-    fontSize: fontSizes.sm,
-    fontWeight: fontWeights.heavy,
   },
 
   // Next Target
