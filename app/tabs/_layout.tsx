@@ -1,7 +1,7 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../components/AuthProvider';
 import { LoadingScreen } from '../../components/LoadingScreen';
@@ -21,7 +21,13 @@ function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 8) + 8 }]}>
+    <View
+      style={[
+        styles.wrapper,
+        Platform.OS === 'web' && styles.wrapperFixed,
+        { paddingBottom: Math.max(insets.bottom, 8) + 8 },
+      ]}
+    >
       <View style={styles.bar}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -107,8 +113,22 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     width: '100%',
   },
+  // On web/PWA: pin the wrapper to the bottom of the viewport so iOS elastic
+  // scroll cannot carry it away, then let the bar center itself inside.
+  wrapperFixed: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    position: 'fixed' as any,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    // Override the native centering so we span the full viewport on web
+    alignSelf: 'stretch',
+    maxWidth: undefined,
+    zIndex: 100,
+  },
   bar: {
     alignItems: 'center',
+    alignSelf: 'center',
     backgroundColor: colors.glassBar,
     borderColor: 'rgba(163, 190, 98, 0.20)',
     borderRadius: 32,
@@ -116,12 +136,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     height: 62,
     justifyContent: 'space-around',
+    maxWidth: 536,
     paddingHorizontal: spacing.xs,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.32,
     shadowRadius: 16,
     elevation: 14,
+    width: '100%',
   },
   tab: {
     alignItems: 'center',

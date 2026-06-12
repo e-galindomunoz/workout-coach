@@ -70,8 +70,8 @@ export function AppScreen({
 
   return (
     <SafeAreaView style={[styles.safeArea, Platform.OS === 'web' && styles.webViewport]}>
-      <View style={styles.backgroundOrbPrimary} />
-      <View style={styles.backgroundOrbSecondary} />
+      <View style={styles.backgroundOrbPrimary} pointerEvents="none" />
+      <View style={styles.backgroundOrbSecondary} pointerEvents="none" />
       {scrollEnabled ? (
         <ScrollView
           style={styles.scrollView}

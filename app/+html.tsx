@@ -42,6 +42,8 @@ export default function Html({ children }: PropsWithChildren) {
 
           html {
             min-height: 100%;
+            /* Prevent iOS elastic overscroll from moving fixed elements */
+            overscroll-behavior: none;
           }
 
           body {
@@ -49,6 +51,9 @@ export default function Html({ children }: PropsWithChildren) {
             min-height: 100vh;
             min-height: -webkit-fill-available;
             min-height: 100dvh;
+            /* Prevent bounce scroll that causes fixed nav to jump on iOS PWA */
+            overscroll-behavior-y: none;
+            overscroll-behavior-x: none;
           }
 
           #root {

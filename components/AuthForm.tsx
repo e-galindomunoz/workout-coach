@@ -123,8 +123,8 @@ export function AuthForm({ mode, alternateHref, alternateLabel }: AuthFormProps)
   return (
     <View style={styles.root}>
       {/* Decorative orbs */}
-      <View style={styles.orbA} />
-      <View style={styles.orbB} />
+      <View style={styles.orbA} pointerEvents="none" />
+      <View style={styles.orbB} pointerEvents="none" />
 
       <SafeAreaView style={styles.fill} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
