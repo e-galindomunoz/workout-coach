@@ -26,11 +26,12 @@ export const supabase = createClient(
   supabaseAnonKey ?? 'public-anon-key-placeholder',
   {
     auth: {
-      ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),
+      ...(Platform.OS !== 'web'
+        ? { storage: AsyncStorage, lock: processLock }
+        : {}),
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      lock: processLock,
     },
   },
 );

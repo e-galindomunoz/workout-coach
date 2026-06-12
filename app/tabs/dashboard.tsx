@@ -174,7 +174,7 @@ export default function DashboardScreen() {
                   <Text style={styles.heroNumber}>
                     {latestMetric ? `${latestMetric.weight}` : '--'}
                   </Text>
-                  <Text style={styles.heroLabel}>lb bodyweight</Text>
+                  <Text style={styles.heroLabel}>bodyweight</Text>
                 </View>
                 <View style={styles.heroStatDivider} />
                 <View style={styles.heroStat}>
