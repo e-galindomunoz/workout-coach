@@ -106,6 +106,8 @@ On iPhone Safari:
 3. Tap Add to Home Screen.
 4. Confirm the name and icon.
 
+If the icon looks stale after a deploy, Safari is probably caching the pinned web app assets. Remove the existing home-screen app, reload the site in Safari, and add it again from Share → Add to Home Screen.
+
 The PWA config uses the Ironline app name, the dark olive theme color, and `assets/icon.png`.
 
 ### Web testing checklist

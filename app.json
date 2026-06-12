@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#090B08",
     "scheme": "workoutcoach",
     "ios": {
       "supportsTablet": false,

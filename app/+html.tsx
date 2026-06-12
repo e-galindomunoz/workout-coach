@@ -1,5 +1,6 @@
 import { type PropsWithChildren } from 'react';
 import { ScrollViewStyleReset } from 'expo-router/html';
+import { colors } from '../lib/theme';
 
 const favicon = require('../assets/favicon.png');
 const icon192 = require('../assets/icon-192.png');
@@ -24,6 +25,31 @@ export default function Html({ children }: PropsWithChildren) {
         <link rel="icon" type="image/png" sizes="192x192" href={icon192} />
         <link rel="icon" type="image/png" sizes="512x512" href={icon512} />
         <link rel="apple-touch-icon" sizes="180x180" href={appleTouchIcon} />
+        <style>{`
+          :root {
+            color-scheme: dark;
+            background: ${colors.background};
+          }
+
+          html,
+          body,
+          #root {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            padding: 0;
+            background: ${colors.background};
+          }
+
+          body {
+            overflow-x: hidden;
+          }
+
+          body > div {
+            min-height: 100%;
+            background: ${colors.background};
+          }
+        `}</style>
         <ScrollViewStyleReset />
       </head>
       <body>{children}</body>

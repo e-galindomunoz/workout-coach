@@ -65,11 +65,12 @@ export function AppScreen({
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, Platform.OS === 'web' && styles.webViewport]}>
       <View style={styles.backgroundOrbPrimary} />
       <View style={styles.backgroundOrbSecondary} />
       {scrollEnabled ? (
         <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
@@ -100,14 +101,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  webViewport: {
+    minHeight: '100%',
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   scrollContent: {
     flexGrow: 1,
+    minHeight: '100%',
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
     width: '100%',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
+    backgroundColor: colors.background,
   },
   webContainer: {
     maxWidth: 560,
