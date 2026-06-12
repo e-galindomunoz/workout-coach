@@ -363,6 +363,40 @@ export async function getWorkoutSessionById(id: string) {
   return result;
 }
 
+export async function updateWorkoutSession(input: {
+  id: string;
+  title: string;
+  startedAt: string;
+  completedAt: string | null;
+  durationMinutes: number | null;
+  notes: string | null;
+}) {
+  const userResult = await getCurrentUser();
+
+  if (userResult.error || !userResult.data) {
+    return {
+      data: null,
+      error: userResult.error ?? new Error('No authenticated user found.'),
+    };
+  }
+
+  const result = await supabase
+    .from('workout_sessions')
+    .update({
+      title: input.title,
+      started_at: input.startedAt,
+      completed_at: input.completedAt,
+      duration_minutes: input.durationMinutes,
+      notes: input.notes,
+    })
+    .eq('id', input.id)
+    .eq('user_id', userResult.data.id)
+    .select()
+    .single<WorkoutSession>();
+
+  return result;
+}
+
 export async function deleteWorkoutSession(id: string) {
   const userResult = await getCurrentUser();
 

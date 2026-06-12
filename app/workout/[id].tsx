@@ -3,11 +3,14 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { AppScreen } from '../../components/AppScreen';
@@ -29,6 +32,7 @@ import {
   getExerciseHistory,
   getExerciseLogsBySession,
   getWorkoutSessionById,
+  updateWorkoutSession,
 } from '../../lib/supabase';
 import { colors, fontSizes, fontWeights, radius, spacing } from '../../lib/theme';
 import { calculateTotalVolume, countWorkoutSets, groupExerciseLogs } from '../../lib/workouts';
@@ -48,6 +52,14 @@ export default function WorkoutSummaryScreen() {
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightResult, setInsightResult] = useState<WorkoutInsightResponse | null>(null);
   const [insightError, setInsightError] = useState<string | null>(null);
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editDuration, setEditDuration] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadSummary() {
@@ -154,6 +166,69 @@ export default function WorkoutSummaryScreen() {
     }
   }
 
+  function openEditModal() {
+    if (!session) return;
+    setEditTitle(session.title);
+    setEditDate(toLocalDateString(session.started_at));
+    setEditDuration(session.duration_minutes != null ? String(session.duration_minutes) : '');
+    setEditNotes(session.notes ?? '');
+    setEditError(null);
+    setEditModalVisible(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!session) return;
+    setEditError(null);
+
+    const title = editTitle.trim();
+    if (!title) {
+      setEditError('Workout title is required.');
+      return;
+    }
+
+    const startedAtISO = parseDateToISO(editDate.trim());
+    if (!startedAtISO) {
+      setEditError('Date must be in YYYY-MM-DD format (e.g. 2025-06-10).');
+      return;
+    }
+
+    const durationRaw = editDuration.trim();
+    let durationMinutes: number | null = null;
+    if (durationRaw) {
+      const parsed = Number(durationRaw);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setEditError('Duration must be a positive number of minutes.');
+        return;
+      }
+      durationMinutes = Math.round(parsed);
+    }
+
+    const completedAt = durationMinutes != null
+      ? new Date(new Date(startedAtISO).getTime() + durationMinutes * 60_000).toISOString()
+      : session.completed_at;
+
+    setEditSaving(true);
+    const result = await updateWorkoutSession({
+      id: session.id,
+      title,
+      startedAt: startedAtISO,
+      completedAt,
+      durationMinutes,
+      notes: editNotes.trim() || null,
+    });
+    setEditSaving(false);
+
+    if (result.error) {
+      setEditError(result.error.message);
+      return;
+    }
+
+    if (result.data) {
+      setSession(result.data);
+    }
+    setEditModalVisible(false);
+  }
+
   function confirmDeleteWorkout() {
     if (!session) return;
     Alert.alert(
@@ -184,9 +259,14 @@ export default function WorkoutSummaryScreen() {
           headerBackTitle: 'Tabs',
           headerRight: () =>
             session ? (
-              <Pressable onPress={confirmDeleteWorkout} style={styles.headerDeleteButton}>
-                <Text style={styles.headerDelete}>Delete</Text>
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable onPress={openEditModal} style={styles.headerIconButton}>
+                  <Ionicons name="pencil-outline" size={18} color={colors.accent} />
+                </Pressable>
+                <Pressable onPress={confirmDeleteWorkout} style={styles.headerDeleteButton}>
+                  <Text style={styles.headerDelete}>Delete</Text>
+                </Pressable>
+              </View>
             ) : null,
         }}
       />
@@ -348,6 +428,99 @@ export default function WorkoutSummaryScreen() {
         )}
       </AppScreen>
 
+      {/* Edit modal */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={editModalVisible}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setEditModalVisible(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <ScrollView
+                contentContainerStyle={styles.modalContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.modalTitle}>Edit Workout</Text>
+                <Text style={styles.modalSubtitle}>UPDATE SESSION DETAILS</Text>
+
+                <View style={styles.editFields}>
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel}>TITLE</Text>
+                    <TextInput
+                      onChangeText={setEditTitle}
+                      placeholder="Workout title"
+                      placeholderTextColor={colors.textSoft}
+                      style={styles.editInput}
+                      value={editTitle}
+                    />
+                  </View>
+
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel}>DATE</Text>
+                    <TextInput
+                      keyboardType="numbers-and-punctuation"
+                      onChangeText={setEditDate}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={colors.textSoft}
+                      style={styles.editInput}
+                      value={editDate}
+                    />
+                  </View>
+
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel}>DURATION (MIN)</Text>
+                    <TextInput
+                      keyboardType="number-pad"
+                      onChangeText={setEditDuration}
+                      placeholder="e.g. 60"
+                      placeholderTextColor={colors.textSoft}
+                      style={styles.editInput}
+                      value={editDuration}
+                    />
+                  </View>
+
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel}>NOTES (OPTIONAL)</Text>
+                    <TextInput
+                      multiline
+                      onChangeText={setEditNotes}
+                      placeholder="Session notes..."
+                      placeholderTextColor={colors.textSoft}
+                      style={[styles.editInput, styles.editInputMultiline]}
+                      textAlignVertical="top"
+                      value={editNotes}
+                    />
+                  </View>
+                </View>
+
+                {editError ? (
+                  <View style={styles.editErrorBanner}>
+                    <Ionicons name="alert-circle" size={14} color={colors.danger} />
+                    <Text style={styles.editErrorText}>{editError}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.editActions}>
+                  <Button label="Cancel" onPress={() => setEditModalVisible(false)} variant="ghost" />
+                  <View style={styles.editActionFlex}>
+                    <Button
+                      label="Save Changes"
+                      loading={editSaving}
+                      onPress={() => void handleSaveEdit()}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
       {/* Insight modal */}
       <Modal
         animationType="slide"
@@ -428,7 +601,36 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function toLocalDateString(isoString: string): string {
+  const d = new Date(isoString);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateToISO(dateStr: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10) - 1;
+  const day = parseInt(match[3], 10);
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+  return new Date(year, month, day, 12, 0, 0).toISOString();
+}
+
 const styles = StyleSheet.create({
+  headerActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  headerIconButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
   headerDelete: {
     color: colors.danger,
     fontSize: fontSizes.md,
@@ -698,5 +900,57 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSizes.sm,
     lineHeight: 18,
+  },
+
+  // Edit modal
+  editFields: {
+    gap: spacing.md,
+  },
+  editField: {
+    gap: spacing.xs,
+  },
+  editLabel: {
+    color: colors.accent,
+    fontSize: fontSizes.xs,
+    fontWeight: fontWeights.heavy,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  editInput: {
+    backgroundColor: colors.surfaceInput,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: fontSizes.lg,
+    minHeight: 52,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  editInputMultiline: {
+    minHeight: 80,
+  },
+  editErrorBanner: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.dangerSurface,
+    borderColor: 'rgba(224, 108, 117, 0.28)',
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    padding: spacing.sm,
+  },
+  editErrorText: {
+    color: colors.danger,
+    flex: 1,
+    fontSize: fontSizes.sm,
+    lineHeight: 18,
+  },
+  editActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  editActionFlex: {
+    flex: 1,
   },
 });
